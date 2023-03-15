@@ -1,4 +1,5 @@
 import std.json;
+import std.regex : ctRegex, matchFirst;
 import std.conv : to;
 import std.array : replace;
 import std.file : readText;
@@ -128,4 +129,20 @@ unittest
     assert(extractor.getURL(18) == "https://rr2---sn-f5o5-jhod.googlevideo.com/videoplayback?expire=1677997809&ei=keIDZIHQKMWC1ga62YWIDQ&ip=105.66.0.249&id=o-ADmt4SY6m6445pG7f4G5f72y1NE48ZiWiqWDA9pi6iQo&itag=18&source=youtube&requiressl=yes&mh=7c&mm=31%2C29&mn=sn-f5o5-jhod%2Csn-h5q7knes&ms=au%2Crdu&mv=m&mvi=2&pl=24&initcwndbps=275000&vprv=1&mime=video%2Fmp4&ns=XFlGVko7q0z2CzI9Odw1BvcL&cnr=14&ratebypass=yes&dur=212.091&lmt=1674233743350828&mt=1677975897&fvip=4&fexp=24007246&c=WEB&txp=4530434&n=TVXfDeJvgqqwQZo&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cvprv%2Cmime%2Cns%2Ccnr%2Cratebypass%2Cdur%2Clmt&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=AG3C_xAwRQIgZ_NXvvyuBRfcZ0Jmzc3UY0u4LlHk31riZU2FhqfFR7kCIQC62jB2OlVrTCZrSJ_itMUP5URwKclnuZXzkGCksV9I6g%3D%3D&sig=AOq0QJ8wRQIgbJLlJRLLqu-RJ0ys8Rioy-CRtJLG_5t2WEHgLfRLCwgCIQDri728L1lXeqfbUSRArzq2N6Uf4AvLW76vl_tRRENKKg%3D%3D");
 
     assert(extractor.getURL(396) == "https://rr2---sn-f5o5-jhod.googlevideo.com/videoplayback?expire=1677998710&ei=FuYDZOvcF5rA1wbqpY-QAg&ip=105.66.0.249&id=o-AL9i4R7ZWDbkqGFcpqCjR64ZM9jhfSeNUHS2aDbJObwp&itag=396&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&mh=7c&mm=31%2C29&mn=sn-f5o5-jhod%2Csn-h5q7knes&ms=au%2Crdu&mv=m&mvi=2&pl=24&initcwndbps=277500&vprv=1&mime=video%2Fmp4&ns=B5uSVdIbFLxYS_fhKnn8WxIL&gir=yes&clen=5953258&dur=212.040&lmt=1674230525337110&mt=1677976618&fvip=4&keepalive=yes&fexp=24007246&c=WEB&txp=4537434&n=HGV37DW5jPmqkk_&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Cvprv%2Cmime%2Cns%2Cgir%2Cclen%2Cdur%2Clmt&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=AG3C_xAwRQIhAIAFJFr1v__Yzrvr6cZ5xvpqP3F2VJtTAFFi0CdOeapGAiBV65ILOFQ1nshXJqO0X0aj0y6XNyr7ke2rK_CreaoQMg%3D%3D&sig=AOq0QJ8wRgIhAIKjjWxM3aYtkLU79cMXE6UdgdvkoPaxgljpVjZ2PDf3AiEA0-8R1MoIY_dEi1EdCmjSa0ujSbH8cKG88Hiq9FsiUoI%3D");
+}
+
+string parseBaseJSURL(string html)
+{
+    auto regex = ctRegex!`jsUrl: "(.*?)"`;
+    auto match = html.matchFirst(regex);
+    if(match.empty)
+    {
+        return "";
+    }
+    return "https://www.youtube.com" ~ match[1];
+}
+
+unittest
+{
+    assert("https://www.youtube.com/s/player/7862ca1f/player_ias.vflset/ar_EG/base.js" == "dQw4w9WgXcQ.html".readText().parseBaseJSURL());
 }
