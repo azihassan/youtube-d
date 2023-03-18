@@ -18,7 +18,14 @@ void main(string[] args)
     foreach(url; args[1 .. $])
     {
         string html = url.get().idup;
-        auto parser = YoutubeVideoURLExtractor(html);
+        debug
+        {
+            write("dQ.html", html);
+        }
+        string baseJSURL = html.parseBaseJSURL();
+        writeln("base.js URL = ", baseJSURL);
+        string baseJS = baseJSURL.get().idup;
+        auto parser = AdvancedYoutubeVideoURLExtractor(html, baseJS);
 
         string filename = format!"%s-%s.mp4"(parser.getTitle(), parser.getID()).sanitizePath();
         string destination = buildPath(getcwd(), filename);
