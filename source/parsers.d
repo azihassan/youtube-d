@@ -1,4 +1,6 @@
 import std.json;
+import std.algorithm : canFind;
+import std.net.curl : get;
 import std.uri : decodeComponent, encodeComponent;
 import std.stdio;
 import std.typecons : tuple, Tuple;
@@ -11,7 +13,15 @@ import std.algorithm : reverse, map;
 
 import html;
 
-struct YoutubeVideoURLExtractor
+interface YoutubeVideoURLExtractor
+{
+    public string getURL(int itag = 18);
+    public string getTitle();
+    public string getID();
+
+}
+
+class SimpleYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
 {
     string html;
     private Document parser;
@@ -52,7 +62,7 @@ struct YoutubeVideoURLExtractor
 unittest
 {
     string html = readText("zoz.html");
-    auto extractor = YoutubeVideoURLExtractor(html);
+    auto extractor = new SimpleYoutubeVideoURLExtractor(html);
 
     assert(extractor.getURL(18) == "https://r4---sn-f5o5-jhol.googlevideo.com/videoplayback?expire=1638935038&ei=ntWvYYf_NZiJmLAPtfySkAc&ip=105.66.6.95&id=o-AG7BUTPMmXcFJCtiIUgzrYXlgliHnrjn8IT0b4D_2u8U&itag=18&source=youtube&requiressl=yes&mh=Zy&mm=31%2C29&mn=sn-f5o5-jhol%2Csn-h5qzen7s&ms=au%2Crdu&mv=m&mvi=4&pl=24&initcwndbps=112500&vprv=1&mime=video%2Fmp4&ns=oWqcgbo-7-88Erb0vfdQlB0G&gir=yes&clen=39377316&ratebypass=yes&dur=579.012&lmt=1638885608167129&mt=1638913037&fvip=4&fexp=24001373%2C24007246&c=WEB&txp=3310222&n=RCgHqivzcADgV0inFcU&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cvprv%2Cmime%2Cns%2Cgir%2Cclen%2Cratebypass%2Cdur%2Clmt&sig=AOq0QJ8wRQIhAP5RM2aRT03WZPwBGRWRs25p6T03kecAfGoqqU1tQt0TAiAW-sbLCLqKm9XATrjmhgB5yIlGUeGF1WiWGWvFcVWgkA%3D%3D&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=AG3C_xAwRgIhAJNGheTpD9UVxle1Q9ECIhRMs7Cfl9ZZtqifKo81o-XRAiEAyYKhi3IBXMhIfPyvfpwmj069jMAhaxapC1IhDCl4k90%3D");
 
@@ -63,7 +73,7 @@ unittest
     assert(extractor.getID() == "sif2JVDhZrQ");
 }
 
-struct AdvancedYoutubeVideoURLExtractor
+class AdvancedYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
 {
     string html;
     string baseJS;
@@ -85,7 +95,17 @@ struct AdvancedYoutubeVideoURLExtractor
         return params["url"].decodeComponent() ~ "&" ~ params["sp"] ~ "=" ~ sig;
     }
 
-    string findSignatureCipher(int itag)
+    string getTitle()
+    {
+        return parser.querySelector("meta[name=title]").attr("content").idup;
+    }
+
+    string getID()
+    {
+        return parser.querySelector("meta[itemprop=videoId]").attr("content").idup;
+    }
+
+    private string findSignatureCipher(int itag)
     {
         string encoded = "itag%3D" ~ itag.to!string;
         long index = html.indexOf(encoded);
@@ -107,24 +127,13 @@ struct AdvancedYoutubeVideoURLExtractor
         }
         return html[startIndex + 1 .. endIndex].replace(`\u0026`, "&");
     }
-
-    string getTitle()
-    {
-        return parser.querySelector("meta[name=title]").attr("content").idup;
-    }
-
-    string getID()
-    {
-        return parser.querySelector("meta[itemprop=videoId]").attr("content").idup;
-    }
-
 }
 
 unittest
 {
     string html = readText("dQw4w9WgXcQ.html");
     string baseJS = readText("base.min.js");
-    auto extractor = AdvancedYoutubeVideoURLExtractor(html, baseJS);
+    auto extractor = new AdvancedYoutubeVideoURLExtractor(html, baseJS);
 
     assert(extractor.getID() == "dQw4w9WgXcQ");
     assert(extractor.getTitle() == "Rick Astley - Never Gonna Give You Up (Official Music Video)");
@@ -136,6 +145,37 @@ unittest
     assert(extractor.getURL(18) == "https://rr2---sn-f5o5-jhod.googlevideo.com/videoplayback?expire=1677997809&ei=keIDZIHQKMWC1ga62YWIDQ&ip=105.66.0.249&id=o-ADmt4SY6m6445pG7f4G5f72y1NE48ZiWiqWDA9pi6iQo&itag=18&source=youtube&requiressl=yes&mh=7c&mm=31%2C29&mn=sn-f5o5-jhod%2Csn-h5q7knes&ms=au%2Crdu&mv=m&mvi=2&pl=24&initcwndbps=275000&vprv=1&mime=video%2Fmp4&ns=XFlGVko7q0z2CzI9Odw1BvcL&cnr=14&ratebypass=yes&dur=212.091&lmt=1674233743350828&mt=1677975897&fvip=4&fexp=24007246&c=WEB&txp=4530434&n=TVXfDeJvgqqwQZo&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cvprv%2Cmime%2Cns%2Ccnr%2Cratebypass%2Cdur%2Clmt&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=AG3C_xAwRQIgZ_NXvvyuBRfcZ0Jmzc3UY0u4LlHk31riZU2FhqfFR7kCIQC62jB2OlVrTCZrSJ_itMUP5URwKclnuZXzkGCksV9I6g%3D%3D&sig=AOq0QJ8wRQIgbJLlJRLLqu-RJ0ys8Rioy-CRtJLG_5t2WEHgLfRLCwgCIQDri728L1lXeqfbUSRArzq2N6Uf4AvLW76vl_tRRENKKg%3D%3D");
 
     assert(extractor.getURL(396) == "https://rr2---sn-f5o5-jhod.googlevideo.com/videoplayback?expire=1677997809&ei=keIDZIHQKMWC1ga62YWIDQ&ip=105.66.0.249&id=o-ADmt4SY6m6445pG7f4G5f72y1NE48ZiWiqWDA9pi6iQo&itag=396&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&mh=7c&mm=31%2C29&mn=sn-f5o5-jhod%2Csn-h5q7knes&ms=au%2Crdu&mv=m&mvi=2&pl=24&initcwndbps=275000&vprv=1&mime=video%2Fmp4&ns=V1YGXTHGUU0a4PsRJqmYKX0L&gir=yes&clen=5953258&dur=212.040&lmt=1674230525337110&mt=1677975897&fvip=4&keepalive=yes&fexp=24007246&c=WEB&txp=4537434&n=iRrA3X-4scFA5la&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Cvprv%2Cmime%2Cns%2Cgir%2Cclen%2Cdur%2Clmt&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=AG3C_xAwRQIgE-grPIIwKVqUa_siK-FtbLtMME0LPjp9rNlzuvLN7XQCIQCfVt03aw8T9cNgG3u_pFuQafSG4AQeKpgLEHcvodbUjA%3D%3D&sig=AOq0QJ8wRQIgadIMr0vpR2qXdJuUXwsemVtnHk62MbU6kF5SrAfOGlwCIQDYj3buw7XBrdJDtAAUL42iVe5Bfi8PRLVUK3aq-Zc2iA%3D%3D");
+}
+
+class YoutubeVideoURLExtractorFactory
+{
+    public static YoutubeVideoURLExtractor create(string html)
+    {
+        if(html.canFind("signatureCipher"))
+        {
+            string baseJSURL = html.parseBaseJSURL();
+            writeln("base.js URL = ", baseJSURL);
+            string baseJS = baseJSURL.get().idup;
+            return new AdvancedYoutubeVideoURLExtractor(html, baseJS);
+        }
+        return new SimpleYoutubeVideoURLExtractor(html);
+    }
+}
+
+unittest
+{
+    string html = "dQ.html".readText();
+    auto parser = YoutubeVideoURLExtractorFactory.create(html);
+    assert(cast(AdvancedYoutubeVideoURLExtractor) parser);
+    assert(!cast(SimpleYoutubeVideoURLExtractor) parser);
+}
+
+unittest
+{
+    string html = "zoz.html".readText();
+    auto parser = YoutubeVideoURLExtractorFactory.create(html);
+    assert(cast(SimpleYoutubeVideoURLExtractor) parser);
+    assert(!cast(AdvancedYoutubeVideoURLExtractor) parser);
 }
 
 string[string] parseQueryString(string input)

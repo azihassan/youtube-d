@@ -22,11 +22,8 @@ void main(string[] args)
         {
             write("dQ.html", html);
         }
-        string baseJSURL = html.parseBaseJSURL();
-        writeln("base.js URL = ", baseJSURL);
-        string baseJS = baseJSURL.get().idup;
-        auto parser = AdvancedYoutubeVideoURLExtractor(html, baseJS);
 
+        YoutubeVideoURLExtractor parser = YoutubeVideoURLExtractorFactory.create(html);
         string filename = format!"%s-%s.mp4"(parser.getTitle(), parser.getID()).sanitizePath();
         string destination = buildPath(getcwd(), filename);
         string link = parser.getURL(18);
