@@ -18,12 +18,7 @@ void main(string[] args)
     foreach(url; args[1 .. $])
     {
         string html = url.get().idup;
-        debug
-        {
-            write("dQ.html", html);
-        }
-
-        YoutubeVideoURLExtractor parser = YoutubeVideoURLExtractorFactory.create(html);
+        YoutubeVideoURLExtractor parser = makeParser(html);
         string filename = format!"%s-%s.mp4"(parser.getTitle(), parser.getID()).sanitizePath();
         string destination = buildPath(getcwd(), filename);
         string link = parser.getURL(18);

@@ -11,6 +11,8 @@ import std.file : readText;
 import std.string : indexOf, format, lastIndexOf, split, strip;
 import std.algorithm : reverse, map;
 
+import helpers : logMessage, parseQueryString;
+
 import html;
 
 interface YoutubeVideoURLExtractor
@@ -147,25 +149,27 @@ unittest
     assert(extractor.getURL(396) == "https://rr2---sn-f5o5-jhod.googlevideo.com/videoplayback?expire=1677997809&ei=keIDZIHQKMWC1ga62YWIDQ&ip=105.66.0.249&id=o-ADmt4SY6m6445pG7f4G5f72y1NE48ZiWiqWDA9pi6iQo&itag=396&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&mh=7c&mm=31%2C29&mn=sn-f5o5-jhod%2Csn-h5q7knes&ms=au%2Crdu&mv=m&mvi=2&pl=24&initcwndbps=275000&vprv=1&mime=video%2Fmp4&ns=V1YGXTHGUU0a4PsRJqmYKX0L&gir=yes&clen=5953258&dur=212.040&lmt=1674230525337110&mt=1677975897&fvip=4&keepalive=yes&fexp=24007246&c=WEB&txp=4537434&n=iRrA3X-4scFA5la&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Cvprv%2Cmime%2Cns%2Cgir%2Cclen%2Cdur%2Clmt&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=AG3C_xAwRQIgE-grPIIwKVqUa_siK-FtbLtMME0LPjp9rNlzuvLN7XQCIQCfVt03aw8T9cNgG3u_pFuQafSG4AQeKpgLEHcvodbUjA%3D%3D&sig=AOq0QJ8wRQIgadIMr0vpR2qXdJuUXwsemVtnHk62MbU6kF5SrAfOGlwCIQDYj3buw7XBrdJDtAAUL42iVe5Bfi8PRLVUK3aq-Zc2iA%3D%3D");
 }
 
-class YoutubeVideoURLExtractorFactory
+YoutubeVideoURLExtractor makeParser(string html)
 {
-    public static YoutubeVideoURLExtractor create(string html)
+    return makeParser(html, baseJSURL => baseJSURL.get().idup);
+}
+
+YoutubeVideoURLExtractor makeParser(string html, string function(string) performGETRequest)
+{
+    if(html.canFind("signatureCipher"))
     {
-        if(html.canFind("signatureCipher"))
-        {
-            string baseJSURL = html.parseBaseJSURL();
-            writeln("base.js URL = ", baseJSURL);
-            string baseJS = baseJSURL.get().idup;
-            return new AdvancedYoutubeVideoURLExtractor(html, baseJS);
-        }
-        return new SimpleYoutubeVideoURLExtractor(html);
+        string baseJSURL = html.parseBaseJSURL();
+        logMessage("Found base.js URL = ", baseJSURL);
+        string baseJS = performGETRequest(baseJSURL);
+        return new AdvancedYoutubeVideoURLExtractor(html, baseJS);
     }
+    return new SimpleYoutubeVideoURLExtractor(html);
 }
 
 unittest
 {
     string html = "dQ.html".readText();
-    auto parser = YoutubeVideoURLExtractorFactory.create(html);
+    auto parser = makeParser(html, url => "");
     assert(cast(AdvancedYoutubeVideoURLExtractor) parser);
     assert(!cast(SimpleYoutubeVideoURLExtractor) parser);
 }
@@ -173,33 +177,9 @@ unittest
 unittest
 {
     string html = "zoz.html".readText();
-    auto parser = YoutubeVideoURLExtractorFactory.create(html);
+    auto parser = makeParser(html, url => "");
     assert(cast(SimpleYoutubeVideoURLExtractor) parser);
     assert(!cast(AdvancedYoutubeVideoURLExtractor) parser);
-}
-
-string[string] parseQueryString(string input)
-{
-    string[string] result;
-    foreach(params; input.split("&"))
-    {
-        string[] parts = params.split("=");
-        result[parts[0]] = parts[1];
-    }
-    return result;
-}
-
-unittest
-{
-    string[string] received = "s=P%3D%3DAi2cZ-qa3KUVLR%3D8ifB5eVi24LUAAtDJdrBXAwub3jYDQICwlGOfArS5Fk6UbM26kHntVmeswXUuJdXq2Rpv0rMIdagIQRw8JQ0qO7&sp=sig&url=https://rr2---sn-f5o5-jhod.googlevideo.com/videoplayback%3Fexpire%3D1677997809%26ei%3DkeIDZIHQKMWC1ga62YWIDQ%26ip%3D105.66.0.249%26id%3Do-ADmt4SY6m6445pG7f4G5f72y1NE48ZiWiqWDA9pi6iQo%26itag%3D396%26aitags%3D133%252C134%252C135%252C136%252C137%252C160%252C242%252C243%252C244%252C247%252C248%252C278%252C394%252C395%252C396%252C397%252C398%252C399%26source%3Dyoutube%26requiressl%3Dyes%26mh%3D7c%26mm%3D31%252C29%26mn%3Dsn-f5o5-jhod%252Csn-h5q7knes%26ms%3Dau%252Crdu%26mv%3Dm%26mvi%3D2%26pl%3D24%26initcwndbps%3D275000%26vprv%3D1%26mime%3Dvideo%252Fmp4%26ns%3DV1YGXTHGUU0a4PsRJqmYKX0L%26gir%3Dyes%26clen%3D5953258%26dur%3D212.040%26lmt%3D1674230525337110%26mt%3D1677975897%26fvip%3D4%26keepalive%3Dyes%26fexp%3D24007246%26c%3DWEB%26txp%3D4537434%26n%3DiRrA3X-4scFA5la%26sparams%3Dexpire%252Cei%252Cip%252Cid%252Caitags%252Csource%252Crequiressl%252Cvprv%252Cmime%252Cns%252Cgir%252Cclen%252Cdur%252Clmt%26lsparams%3Dmh%252Cmm%252Cmn%252Cms%252Cmv%252Cmvi%252Cpl%252Cinitcwndbps%26lsig%3DAG3C_xAwRQIgE-grPIIwKVqUa_siK-FtbLtMME0LPjp9rNlzuvLN7XQCIQCfVt03aw8T9cNgG3u_pFuQafSG4AQeKpgLEHcvodbUjA%253D%253D".parseQueryString();
-
-    string[string] expected = [
-        "s": "P%3D%3DAi2cZ-qa3KUVLR%3D8ifB5eVi24LUAAtDJdrBXAwub3jYDQICwlGOfArS5Fk6UbM26kHntVmeswXUuJdXq2Rpv0rMIdagIQRw8JQ0qO7",
-        "sp": "sig",
-        "url": "https://rr2---sn-f5o5-jhod.googlevideo.com/videoplayback%3Fexpire%3D1677997809%26ei%3DkeIDZIHQKMWC1ga62YWIDQ%26ip%3D105.66.0.249%26id%3Do-ADmt4SY6m6445pG7f4G5f72y1NE48ZiWiqWDA9pi6iQo%26itag%3D396%26aitags%3D133%252C134%252C135%252C136%252C137%252C160%252C242%252C243%252C244%252C247%252C248%252C278%252C394%252C395%252C396%252C397%252C398%252C399%26source%3Dyoutube%26requiressl%3Dyes%26mh%3D7c%26mm%3D31%252C29%26mn%3Dsn-f5o5-jhod%252Csn-h5q7knes%26ms%3Dau%252Crdu%26mv%3Dm%26mvi%3D2%26pl%3D24%26initcwndbps%3D275000%26vprv%3D1%26mime%3Dvideo%252Fmp4%26ns%3DV1YGXTHGUU0a4PsRJqmYKX0L%26gir%3Dyes%26clen%3D5953258%26dur%3D212.040%26lmt%3D1674230525337110%26mt%3D1677975897%26fvip%3D4%26keepalive%3Dyes%26fexp%3D24007246%26c%3DWEB%26txp%3D4537434%26n%3DiRrA3X-4scFA5la%26sparams%3Dexpire%252Cei%252Cip%252Cid%252Caitags%252Csource%252Crequiressl%252Cvprv%252Cmime%252Cns%252Cgir%252Cclen%252Cdur%252Clmt%26lsparams%3Dmh%252Cmm%252Cmn%252Cms%252Cmv%252Cmvi%252Cpl%252Cinitcwndbps%26lsig%3DAG3C_xAwRQIgE-grPIIwKVqUa_siK-FtbLtMME0LPjp9rNlzuvLN7XQCIQCfVt03aw8T9cNgG3u_pFuQafSG4AQeKpgLEHcvodbUjA%253D%253D"
-    ];
-
-    assert(received == expected);
 }
 
 string parseBaseJSURL(string html)
@@ -232,8 +212,7 @@ struct EncryptionAlgorithm
         this.javascript = javascript;
 
         string algorithm = matchOrFail!(`a\s*=\s*a\.split\(""\);\s*((.|\s)*?);\s*return a\.join\(""\)`, false);
-        //writeln("Matched algorithm = ", algorithm);
-        //writeln();
+        logMessage("Matched algorithm = ", algorithm);
         string[] steps = algorithm.split(";");
         foreach(step; steps.map!strip)
         {
@@ -241,8 +220,7 @@ struct EncryptionAlgorithm
             ulong argument = step[step.indexOf(',') + 1 .. step.indexOf(')')].strip().to!ulong;
             this.steps ~= tuple(functionName, argument);
         }
-        //writeln("Parsed steps : ", this.steps);
-        //writeln();
+        logMessage("Parsed steps : ", this.steps);
         parseStepFunctionNames();
     }
 
@@ -251,10 +229,9 @@ struct EncryptionAlgorithm
         char[] copy = signatureCipher.decodeComponent.dup;
         foreach(step; steps)
         {
-            //writeln(step);
-            //writeln(obfuscatedStepFunctionNames);
-            //writeln("before step = ", copy);
-            //writeln();
+            logMessage(step);
+            logMessage(obfuscatedStepFunctionNames);
+            logMessage("before step = ", copy);
             switch(obfuscatedStepFunctionNames[step[0]])
             {
                 case "flip":
@@ -272,7 +249,7 @@ struct EncryptionAlgorithm
                 default:
                     assert(0);
             }
-            //writeln("after step = ", copy);
+            logMessage("after step = ", copy);
         }
         return copy.encodeComponent.idup;
     }
@@ -280,16 +257,13 @@ struct EncryptionAlgorithm
     private void parseStepFunctionNames()
     {
         string flip = matchOrFail!(`([A-Za-z]{2}):function\(a\)\{a\.reverse\(\)\}`);
-        //writeln("Matched flip = ", flip);
-        //writeln();
+        logMessage("Matched flip = ", flip);
 
         string removeFromStart = matchOrFail!(`([A-Za-z]{2}):function\(a,b\)\{a\.splice\(0,b\)\}`);
-        //writeln("Matched removeFromStart = ", removeFromStart);
-        //writeln();
+        logMessage("Matched removeFromStart = ", removeFromStart);
 
         string swapFirstCharacterWith = matchOrFail!(`([A-Za-z]{2}):function\(a,b\)\{var c=a\[0\];a\[0\]=a\[b%a\.length\];a\[b%a\.length\]=c\}`);
-        //writeln("Matched swapFirstCharacterWith = ", swapFirstCharacterWith);
-        //writeln();
+        logMessage("Matched swapFirstCharacterWith = ", swapFirstCharacterWith);
 
         obfuscatedStepFunctionNames[flip] = "flip";
         obfuscatedStepFunctionNames[swapFirstCharacterWith] = "swapFirstCharacterWith";
@@ -298,11 +272,10 @@ struct EncryptionAlgorithm
 
     private string matchOrFail(string pattern, bool escape = false)()
     {
-        //writeln("Matching ", escape ? pattern.escaper.to!string : pattern);
-        //writeln();
+        logMessage("Matching ", escape ? pattern.escaper.to!string : pattern);
         auto regex = ctRegex!(escape ? pattern.escaper.to!string : pattern);
         auto match = javascript.matchFirst(regex);
-        //writeln(match);
+        logMessage(match);
         if(match.empty)
         {
             throw new Exception("Failed to parse encryption steps");
@@ -332,8 +305,5 @@ unittest
 {
     auto algorithm = EncryptionAlgorithm("base.min.js".readText());
     string signature = algorithm.decrypt("L%3D%3DgKKNERRt_lv67W%3DvA4fU6N2qzrARSUbfqeXlAL827irDQICgwCLRfLgHEW2t5_GLJtRC-yoiR8sy0JR-uqLLRJlLJbgIQRw8JQ0qO1");
-
-    //writeln("expected = AOq0QJ8wRQIgbJLlJRLLqu-RJ0ys8Rioy-CRtJLG_5t2WEHgLfRLCwgCIQDri728L1lXeqfbUSRArzq2N6Uf4AvLW76vl_tRRENKKg%3D%3D");
-    //writeln("received = ", signature);
     assert(signature == "AOq0QJ8wRQIgbJLlJRLLqu-RJ0ys8Rioy-CRtJLG_5t2WEHgLfRLCwgCIQDri728L1lXeqfbUSRArzq2N6Uf4AvLW76vl_tRRENKKg%3D%3D");
 }
