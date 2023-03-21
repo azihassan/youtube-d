@@ -4,14 +4,13 @@ import std.net.curl : get;
 import std.uri : decodeComponent, encodeComponent;
 import std.stdio;
 import std.typecons : tuple, Tuple;
-import std.regex : ctRegex, matchFirst, escaper;
 import std.conv : to;
 import std.array : replace;
 import std.file : readText;
 import std.string : indexOf, format, lastIndexOf, split, strip;
 import std.algorithm : reverse, map;
 
-import helpers : logMessage, parseQueryString;
+import helpers : logMessage, parseQueryString, matchOrFail;
 
 import html;
 
@@ -184,13 +183,7 @@ unittest
 
 string parseBaseJSURL(string html)
 {
-    auto regex = ctRegex!`jsUrl"*:\s*"(.*?)"`;
-    auto match = html.matchFirst(regex);
-    if(match.empty)
-    {
-        return "";
-    }
-    return "https://www.youtube.com" ~ match[1];
+    return "https://www.youtube.com" ~ html.matchOrFail!`jsUrl"*:\s*"(.*?)"`;
 }
 
 unittest
@@ -211,7 +204,7 @@ struct EncryptionAlgorithm
     {
         this.javascript = javascript;
 
-        string algorithm = matchOrFail!(`a\s*=\s*a\.split\(""\);\s*((.|\s)*?);\s*return a\.join\(""\)`, false);
+        string algorithm = javascript.matchOrFail!(`a\s*=\s*a\.split\(""\);\s*((.|\s)*?);\s*return a\.join\(""\)`, false);
         logMessage("Matched algorithm = ", algorithm);
         string[] steps = algorithm.split(";");
         foreach(step; steps.map!strip)
@@ -256,31 +249,18 @@ struct EncryptionAlgorithm
 
     private void parseStepFunctionNames()
     {
-        string flip = matchOrFail!(`([A-Za-z]{2}):function\(a\)\{a\.reverse\(\)\}`);
+        string flip = javascript.matchOrFail!(`([A-Za-z]{2}):function\(a\)\{a\.reverse\(\)\}`);
         logMessage("Matched flip = ", flip);
 
-        string removeFromStart = matchOrFail!(`([A-Za-z]{2}):function\(a,b\)\{a\.splice\(0,b\)\}`);
+        string removeFromStart = javascript.matchOrFail!(`([A-Za-z]{2}):function\(a,b\)\{a\.splice\(0,b\)\}`);
         logMessage("Matched removeFromStart = ", removeFromStart);
 
-        string swapFirstCharacterWith = matchOrFail!(`([A-Za-z]{2}):function\(a,b\)\{var c=a\[0\];a\[0\]=a\[b%a\.length\];a\[b%a\.length\]=c\}`);
+        string swapFirstCharacterWith = javascript.matchOrFail!(`([A-Za-z]{2}):function\(a,b\)\{var c=a\[0\];a\[0\]=a\[b%a\.length\];a\[b%a\.length\]=c\}`);
         logMessage("Matched swapFirstCharacterWith = ", swapFirstCharacterWith);
 
         obfuscatedStepFunctionNames[flip] = "flip";
         obfuscatedStepFunctionNames[swapFirstCharacterWith] = "swapFirstCharacterWith";
         obfuscatedStepFunctionNames[removeFromStart] = "removeFromStart";
-    }
-
-    private string matchOrFail(string pattern, bool escape = false)()
-    {
-        logMessage("Matching ", escape ? pattern.escaper.to!string : pattern);
-        auto regex = ctRegex!(escape ? pattern.escaper.to!string : pattern);
-        auto match = javascript.matchFirst(regex);
-        logMessage(match);
-        if(match.empty)
-        {
-            throw new Exception("Failed to parse encryption steps");
-        }
-        return match[1];
     }
 
     private void flip(ref char[] input)
