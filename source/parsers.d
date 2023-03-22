@@ -19,7 +19,6 @@ interface YoutubeVideoURLExtractor
     public string getURL(int itag = 18);
     public string getTitle();
     public string getID();
-
 }
 
 class SimpleYoutubeVideoURLExtractor : YoutubeVideoURLExtractor

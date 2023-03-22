@@ -1,4 +1,5 @@
 import std.stdio : writeln;
+import std.conv : to;
 import std.string : format;
 import std.file : getcwd, write;
 import std.net.curl : get;
@@ -9,19 +10,20 @@ import parsers;
 
 void main(string[] args)
 {
-    if(args.length < 2)
+    if(args.length < 3)
     {
-        writeln("Usage : youtube-d <url> [<url> <url>]");
+        writeln("Usage : youtube-d -f <itag> <url> [<url> <url>]");
         return;
     }
 
-    foreach(url; args[1 .. $])
+    int itag = args[2].to!int;
+    foreach(url; args[3 .. $])
     {
         string html = url.get().idup;
         YoutubeVideoURLExtractor parser = makeParser(html);
         string filename = format!"%s-%s.mp4"(parser.getTitle(), parser.getID()).sanitizePath();
         string destination = buildPath(getcwd(), filename);
-        string link = parser.getURL(18);
+        string link = parser.getURL(itag);
 
         debug
         {
