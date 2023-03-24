@@ -19,6 +19,7 @@ interface YoutubeVideoURLExtractor
     public string getURL(int itag = 18);
     public string getTitle();
     public string getID();
+    public YoutubeFormat[] getFormats();
 }
 
 class SimpleYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
@@ -48,6 +49,32 @@ class SimpleYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
         return url.replace(`\u0026`, "&");
     }
 
+    YoutubeFormat[] getFormats()
+    {
+        return getFormats("formats") ~ getFormats("adaptiveFormats");
+    }
+
+    private YoutubeFormat[] getFormats(string formatKey)
+    {
+        auto streamingData = "{" ~ html.matchOrFail!`"streamingData":\{(.*?)\],"probe` ~ "]}";
+        logMessage(streamingData);
+        auto json = streamingData.parseJSON();
+        YoutubeFormat[] formats;
+        foreach(format; json[formatKey].array)
+        {
+            ulong contentLength = "contentLength" in format ? format["contentLength"].str.to!ulong : 0UL;
+            string quality = "qualityLabel" in format ? format["qualityLabel"].str : format["quality"].str;
+            logMessage("contentLength = ", contentLength);
+            formats ~= YoutubeFormat(
+                cast(int) format["itag"].integer,
+                contentLength,
+                quality,
+                format["mimeType"].str,
+            );
+        }
+        return formats;
+    }
+
     string getTitle()
     {
         return parser.querySelector("meta[name=title]").attr("content").idup;
@@ -73,6 +100,32 @@ unittest
     assert(extractor.getID() == "sif2JVDhZrQ");
 }
 
+struct YoutubeFormat
+{
+    int itag;
+    ulong length;
+    string quality;
+    string mimetype;
+}
+
+unittest
+{
+    string html = readText("zoz.html");
+    auto extractor = new SimpleYoutubeVideoURLExtractor(html);
+
+    YoutubeFormat[] formats = extractor.getFormats();
+    writeln(formats.length);
+    assert(formats.length == 18);
+
+    assert(formats[0] == YoutubeFormat(
+        18, 39377316, "360p", `video/mp4; codecs="avc1.42001E, mp4a.40.2"`
+    ));
+
+    assert(formats[7] == YoutubeFormat(
+        244, 43268080, "480p", `video/webm; codecs="vp9"`
+    ));
+}
+
 class AdvancedYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
 {
     string html;
@@ -93,6 +146,11 @@ class AdvancedYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
         auto algorithm = EncryptionAlgorithm(baseJS);
         string sig = algorithm.decrypt(params["s"]);
         return params["url"].decodeComponent() ~ "&" ~ params["sp"] ~ "=" ~ sig;
+    }
+
+    YoutubeFormat[] getFormats()
+    {
+        return [];
     }
 
     string getTitle()
