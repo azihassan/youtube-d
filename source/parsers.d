@@ -68,18 +68,9 @@ class SimpleYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
 
     override string getURL(int itag = 18)
     {
-        string prefix = format!`itag":%d,"url":`(itag);
-
-        long startIndex = html.indexOf(prefix);
-        if(startIndex == -1)
-        {
-            return "";
-        }
-
-        string part = html[startIndex + prefix.length + 1 .. $];
-        long endIndex = part.indexOf('"');
-        string url = part[0 .. endIndex];
-        return url.replace(`\u0026`, "&");
+        return html
+            .matchOrFail(`"itag":` ~ itag.to!string ~ `,"url":"(.*?)"`)
+            .replace(`\u0026`, "&");
     }
 }
 
