@@ -39,14 +39,12 @@ abstract class YoutubeVideoURLExtractor
     private YoutubeFormat[] getFormats(string formatKey)
     {
         auto streamingData = html.matchOrFail!`"streamingData":(.*?),"player`;
-        logMessage(streamingData);
         auto json = streamingData.parseJSON();
         YoutubeFormat[] formats;
         foreach(format; json[formatKey].array)
         {
             ulong contentLength = "contentLength" in format ? format["contentLength"].str.to!ulong : 0UL;
             string quality = "qualityLabel" in format ? format["qualityLabel"].str : format["quality"].str;
-            logMessage("contentLength = ", contentLength);
             formats ~= YoutubeFormat(
                 cast(int) format["itag"].integer,
                 contentLength,
@@ -94,6 +92,16 @@ struct YoutubeFormat
     ulong length;
     string quality;
     string mimetype;
+
+    string toString()
+    {
+        return format!`[%d] (%s) %s MB %s`(
+            itag,
+            quality,
+            length != 0 ? to!string(length / 1024.0 / 1024.0) : "unknown length",
+            mimetype
+        );
+    }
 }
 
 unittest
@@ -174,7 +182,6 @@ unittest
     auto extractor = new AdvancedYoutubeVideoURLExtractor(html, "");
 
     YoutubeFormat[] formats = extractor.getFormats();
-    writeln(formats.length);
     assert(formats.length == 23);
 
     assert(formats[0] == YoutubeFormat(18, 0, "360p", `video/mp4; codecs="avc1.42001E, mp4a.40.2"`));

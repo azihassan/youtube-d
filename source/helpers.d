@@ -115,7 +115,6 @@ string matchOrFail(string source, string pattern)
 
 string matchOrFail(Captures!string match)
 {
-    logMessage(match);
     if(match.empty)
     {
         throw new Exception("Failed to parse encryption steps");
