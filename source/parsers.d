@@ -20,8 +20,16 @@ abstract class YoutubeVideoURLExtractor
     protected Document parser;
 
     abstract public string getURL(int itag = 18);
-    abstract public string getTitle();
-    abstract public string getID();
+
+    public string getTitle()
+    {
+        return parser.querySelector("meta[name=title]").attr("content").idup;
+    }
+
+    public string getID()
+    {
+        return parser.querySelector("meta[itemprop=videoId]").attr("content").idup;
+    }
 
     public YoutubeFormat[] getFormats()
     {
@@ -72,16 +80,6 @@ class SimpleYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
         long endIndex = part.indexOf('"');
         string url = part[0 .. endIndex];
         return url.replace(`\u0026`, "&");
-    }
-
-    override string getTitle()
-    {
-        return parser.querySelector("meta[name=title]").attr("content").idup;
-    }
-
-    override string getID()
-    {
-        return parser.querySelector("meta[itemprop=videoId]").attr("content").idup;
     }
 }
 
@@ -153,16 +151,6 @@ class AdvancedYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
         auto algorithm = EncryptionAlgorithm(baseJS);
         string sig = algorithm.decrypt(params["s"]);
         return params["url"].decodeComponent() ~ "&" ~ params["sp"] ~ "=" ~ sig;
-    }
-
-    override string getTitle()
-    {
-        return parser.querySelector("meta[name=title]").attr("content").idup;
-    }
-
-    override string getID()
-    {
-        return parser.querySelector("meta[itemprop=videoId]").attr("content").idup;
     }
 
     private string findSignatureCipher(int itag)
