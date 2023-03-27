@@ -14,48 +14,61 @@ import helpers : logMessage, parseQueryString, matchOrFail;
 
 import html;
 
-interface YoutubeVideoURLExtractor
+abstract class YoutubeVideoURLExtractor
 {
-    public string getURL(int itag = 18);
-    public string getTitle();
-    public string getID();
+    protected string html;
+    protected Document parser;
+
+    abstract public string getURL(int itag = 18);
+
+    public string getTitle()
+    {
+        return parser.querySelector("meta[name=title]").attr("content").idup;
+    }
+
+    public string getID()
+    {
+        return parser.querySelector("meta[itemprop=videoId]").attr("content").idup;
+    }
+
+    public YoutubeFormat[] getFormats()
+    {
+        return getFormats("formats") ~ getFormats("adaptiveFormats");
+    }
+
+    private YoutubeFormat[] getFormats(string formatKey)
+    {
+        auto streamingData = html.matchOrFail!`"streamingData":(.*?),"player`;
+        auto json = streamingData.parseJSON();
+        YoutubeFormat[] formats;
+        foreach(format; json[formatKey].array)
+        {
+            ulong contentLength = "contentLength" in format ? format["contentLength"].str.to!ulong : 0UL;
+            string quality = "qualityLabel" in format ? format["qualityLabel"].str : format["quality"].str;
+            formats ~= YoutubeFormat(
+                cast(int) format["itag"].integer,
+                contentLength,
+                quality,
+                format["mimeType"].str,
+            );
+        }
+        return formats;
+    }
 }
 
 class SimpleYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
 {
-    string html;
-    private Document parser;
-
     this(string html)
     {
         this.html = html;
         parser = createDocument(html);
     }
 
-    string getURL(int itag = 18)
+    override string getURL(int itag = 18)
     {
-        string prefix = format!`itag":%d,"url":`(itag);
-
-        long startIndex = html.indexOf(prefix);
-        if(startIndex == -1)
-        {
-            return "";
-        }
-
-        string part = html[startIndex + prefix.length + 1 .. $];
-        long endIndex = part.indexOf('"');
-        string url = part[0 .. endIndex];
-        return url.replace(`\u0026`, "&");
-    }
-
-    string getTitle()
-    {
-        return parser.querySelector("meta[name=title]").attr("content").idup;
-    }
-
-    string getID()
-    {
-        return parser.querySelector("meta[itemprop=videoId]").attr("content").idup;
+        return html
+            .matchOrFail(`"itag":` ~ itag.to!string ~ `,"url":"(.*?)"`)
+            .replace(`\u0026`, "&");
     }
 }
 
@@ -73,36 +86,70 @@ unittest
     assert(extractor.getID() == "sif2JVDhZrQ");
 }
 
+struct YoutubeFormat
+{
+    int itag;
+    ulong length;
+    string quality;
+    string mimetype;
+
+    string toString()
+    {
+        return format!`[%d] (%s) %s MB %s`(
+            itag,
+            quality,
+            length != 0 ? to!string(length / 1024.0 / 1024.0) : "unknown length",
+            mimetype
+        );
+    }
+}
+
+unittest
+{
+    string html = readText("zoz.html");
+    auto extractor = new SimpleYoutubeVideoURLExtractor(html);
+
+    YoutubeFormat[] formats = extractor.getFormats();
+    assert(formats.length == 18);
+
+    assert(formats[0] == YoutubeFormat(18, 39377316, "360p", `video/mp4; codecs="avc1.42001E, mp4a.40.2"`));
+    assert(formats[1] == YoutubeFormat(22, 0, "720p", `video/mp4; codecs="avc1.64001F, mp4a.40.2"`));
+    assert(formats[2] == YoutubeFormat(137, 290388574, "1080p", `video/mp4; codecs="avc1.640028"`));
+    assert(formats[3] == YoutubeFormat(248, 150879241, "1080p", `video/webm; codecs="vp9"`));
+    assert(formats[4] == YoutubeFormat(136, 131812763, "720p", `video/mp4; codecs="avc1.64001f"`));
+    assert(formats[5] == YoutubeFormat(247, 84620239, "720p", `video/webm; codecs="vp9"`));
+    assert(formats[6] == YoutubeFormat(135, 65585157, "480p", `video/mp4; codecs="avc1.4d401e"`));
+    assert(formats[7] == YoutubeFormat(244, 43268080, "480p", `video/webm; codecs="vp9"`));
+    assert(formats[8] == YoutubeFormat(134, 32526895, "360p", `video/mp4; codecs="avc1.4d401e"`));
+    assert(formats[9] == YoutubeFormat(243, 24135571, "360p", `video/webm; codecs="vp9"`));
+    assert(formats[10] == YoutubeFormat(133, 15497476, "240p", `video/mp4; codecs="avc1.4d4015"`));
+    assert(formats[11] == YoutubeFormat(242, 13098616, "240p", `video/webm; codecs="vp9"`));
+    assert(formats[12] == YoutubeFormat(160, 6576387, "144p", `video/mp4; codecs="avc1.4d400c"`));
+    assert(formats[13] == YoutubeFormat(278, 6583212, "144p", `video/webm; codecs="vp9"`));
+    assert(formats[14] == YoutubeFormat(140, 9371359, "tiny", `audio/mp4; codecs="mp4a.40.2"`));
+    assert(formats[15] == YoutubeFormat(249, 3314860, "tiny", `audio/webm; codecs="opus"`));
+    assert(formats[16] == YoutubeFormat(250, 4347447, "tiny", `audio/webm; codecs="opus"`));
+    assert(formats[17] == YoutubeFormat(251, 8650557, "tiny", `audio/webm; codecs="opus"`));
+}
+
 class AdvancedYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
 {
-    string html;
-    string baseJS;
-    private Document parser;
+    private string baseJS;
 
     this(string html, string baseJS)
     {
         this.html = html;
+        this.parser = createDocument(html);
         this.baseJS = baseJS;
-        parser = createDocument(html);
     }
 
-    string getURL(int itag = 18)
+    override string getURL(int itag = 18)
     {
         string signatureCipher = findSignatureCipher(itag);
         string[string] params = signatureCipher.parseQueryString();
         auto algorithm = EncryptionAlgorithm(baseJS);
         string sig = algorithm.decrypt(params["s"]);
         return params["url"].decodeComponent() ~ "&" ~ params["sp"] ~ "=" ~ sig;
-    }
-
-    string getTitle()
-    {
-        return parser.querySelector("meta[name=title]").attr("content").idup;
-    }
-
-    string getID()
-    {
-        return parser.querySelector("meta[itemprop=videoId]").attr("content").idup;
     }
 
     private string findSignatureCipher(int itag)
@@ -128,6 +175,40 @@ class AdvancedYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
         return html[startIndex + 1 .. endIndex].replace(`\u0026`, "&");
     }
 }
+
+unittest
+{
+    string html = readText("dQ.html");
+    auto extractor = new AdvancedYoutubeVideoURLExtractor(html, "");
+
+    YoutubeFormat[] formats = extractor.getFormats();
+    assert(formats.length == 23);
+
+    assert(formats[0] == YoutubeFormat(18, 0, "360p", `video/mp4; codecs="avc1.42001E, mp4a.40.2"`));
+    assert(formats[1] == YoutubeFormat(137, 78662712, "1080p", `video/mp4; codecs="avc1.640028"`));
+    assert(formats[2] == YoutubeFormat(248, 55643203, "1080p", `video/webm; codecs="vp9"`));
+    assert(formats[3] == YoutubeFormat(399, 34279919, "1080p", `video/mp4; codecs="av01.0.08M.08"`));
+    assert(formats[4] == YoutubeFormat(136, 16598002, "720p", `video/mp4; codecs="avc1.4d401f"`));
+    assert(formats[5] == YoutubeFormat(247, 17149834, "720p", `video/webm; codecs="vp9"`));
+    assert(formats[6] == YoutubeFormat(398, 19086092, "720p", `video/mp4; codecs="av01.0.05M.08"`));
+    assert(formats[7] == YoutubeFormat(135, 8648011, "480p", `video/mp4; codecs="avc1.4d401e"`));
+    assert(formats[8] == YoutubeFormat(244, 9767682, "480p", `video/webm; codecs="vp9"`));
+    assert(formats[9] == YoutubeFormat(397, 10609264, "480p", `video/mp4; codecs="av01.0.04M.08"`));
+    assert(formats[10] == YoutubeFormat(134, 5661008, "360p", `video/mp4; codecs="avc1.4d401e"`));
+    assert(formats[11] == YoutubeFormat(243, 6839345, "360p", `video/webm; codecs="vp9"`));
+    assert(formats[12] == YoutubeFormat(396, 5953258, "360p", `video/mp4; codecs="av01.0.01M.08"`));
+    assert(formats[13] == YoutubeFormat(133, 3013651, "240p", `video/mp4; codecs="avc1.4d4015"`));
+    assert(formats[14] == YoutubeFormat(242, 3896369, "240p", `video/webm; codecs="vp9"`));
+    assert(formats[15] == YoutubeFormat(395, 3198834, "240p", `video/mp4; codecs="av01.0.00M.08"`));
+    assert(formats[16] == YoutubeFormat(160, 1859270, "144p", `video/mp4; codecs="avc1.4d400c"`));
+    assert(formats[17] == YoutubeFormat(278, 2157715, "144p", `video/webm; codecs="vp9"`));
+    assert(formats[18] == YoutubeFormat(394, 1502336, "144p", `video/mp4; codecs="av01.0.00M.08"`));
+    assert(formats[19] == YoutubeFormat(140, 3433514, "tiny", `audio/mp4; codecs="mp4a.40.2"`));
+    assert(formats[20] == YoutubeFormat(249, 1232413, "tiny", `audio/webm; codecs="opus"`));
+    assert(formats[21] == YoutubeFormat(250, 1630086, "tiny", `audio/webm; codecs="opus"`));
+    assert(formats[22] == YoutubeFormat(251, 3437753, "tiny", `audio/webm; codecs="opus"`));
+}
+
 
 unittest
 {

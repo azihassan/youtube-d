@@ -1,26 +1,47 @@
 import std.stdio : writeln;
+import std.algorithm : each;
 import std.conv : to;
 import std.string : format;
 import std.file : getcwd, write;
 import std.net.curl : get;
 import std.path : buildPath;
+import std.getopt;
 
 import helpers;
 import parsers;
 
 void main(string[] args)
 {
-    if(args.length < 3)
+    int itag;
+    bool displayFormats;
+
+    auto help = args.getopt(
+        std.getopt.config.passThrough,
+        std.getopt.config.caseSensitive,
+        "f", "Format to download (see -F for available formats)", &itag,
+        "F", "List available formats", &displayFormats
+    );
+
+    if(help.helpWanted || args.length == 1)
     {
-        writeln("Usage : youtube-d -f <itag> <url> [<url> <url>]");
+        defaultGetoptPrinter("Youtube downloader", help.options);
         return;
     }
 
-    int itag = args[2].to!int;
-    foreach(url; args[3 .. $])
+    string[] urls = args[1 .. $];
+
+    foreach(url; urls)
     {
         string html = url.get().idup;
         YoutubeVideoURLExtractor parser = makeParser(html);
+        if(displayFormats)
+        {
+            writeln("Available formats for ", url);
+            parser.getFormats().each!writeln;
+            writeln();
+            continue;
+        }
+
         string filename = format!"%s-%s.mp4"(parser.getTitle(), parser.getID()).sanitizePath();
         string destination = buildPath(getcwd(), filename);
         string link = parser.getURL(itag);

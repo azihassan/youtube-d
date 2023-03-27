@@ -1,5 +1,5 @@
 import std.logger : info;
-import std.regex : ctRegex, matchFirst, escaper;
+import std.regex : ctRegex, matchFirst, escaper, regex, Captures;
 import std.algorithm : filter;
 import std.conv : to;
 import std.file : readText, getcwd, exists, getSize, write;
@@ -101,10 +101,20 @@ void logMessage(S...)(S message)
 
 string matchOrFail(string pattern, bool escape = false)(string source)
 {
-    logMessage("Matching ", escape ? pattern.escaper.to!string : pattern);
+    logMessage("Matching ", pattern);
     auto regex = ctRegex!(escape ? pattern.escaper.to!string : pattern);
-    auto match = source.matchFirst(regex);
-    logMessage(match);
+    return source.matchFirst(regex).matchOrFail();
+}
+
+string matchOrFail(string source, string pattern)
+{
+    logMessage("Matching ", pattern);
+    auto regex = regex(pattern);
+    return source.matchFirst(regex).matchOrFail();
+}
+
+string matchOrFail(Captures!string match)
+{
     if(match.empty)
     {
         throw new Exception("Failed to parse encryption steps");
