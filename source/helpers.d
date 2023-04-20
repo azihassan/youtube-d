@@ -3,10 +3,16 @@ import std.regex : ctRegex, matchFirst, escaper, regex, Captures;
 import std.algorithm : filter;
 import std.conv : to;
 import std.file : readText, getcwd, exists, getSize, write;
-import std.net.curl : Curl, CurlOption;
+import std.net.curl : Curl, CurlOption, HTTP, options;
 import std.stdio : writef, writeln, File;
 import std.string : startsWith, indexOf, format, split;
 
+//video.mp4 20 MB
+//video-0-5.mp4.part
+//video-5-10.mp4.part
+//video-10-15.mp4.part
+//video-15-20.mp4.part
+//=>concatenate the files
 void download(string destination, string url, string referer)
 {
     auto http = Curl();
@@ -49,6 +55,16 @@ void download(string destination, string url, string referer)
     };
     auto result = http.perform();
     logMessage("cURL result = ", result);
+}
+
+ulong getContentLength(string url)
+{
+    auto http = HTTP(url);
+    http.method = HTTP.Method.head;
+    http.addRequestHeader("User-Agent", "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:95.0) Gecko/20100101 Firefox/95.0");
+    http.perform();
+    writeln(http.responseHeaders);
+    return http.responseHeaders["content-length"].to!ulong;
 }
 
 string sanitizePath(string path)
@@ -120,4 +136,20 @@ string matchOrFail(Captures!string match)
         throw new Exception("Failed to parse encryption steps");
     }
     return match[1];
+}
+
+ulong[] calculateOffset(ulong length, int chunks, ulong index)
+{
+    ulong start = index * (length / chunks);
+    ulong end = start + (length / chunks);
+    return [start, end];
+}
+
+unittest
+{
+    ulong length = 20 * 1024 * 1024;
+    assert([0, 5 * 1024 * 1024] == length.calculateOffset(4, 0));
+    assert([5 * 1024 * 1024, 10 * 1024 * 1024] == length.calculateOffset(4, 1));
+    assert([10 * 1024 * 1024, 15 * 1024 * 1024] == length.calculateOffset(4, 2));
+    assert([15 * 1024 * 1024, 20 * 1024 * 1024] == length.calculateOffset(4, 3));
 }

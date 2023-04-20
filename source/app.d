@@ -67,8 +67,25 @@ void main(string[] args)
         }
 
         writeln("Downloading ", url, " to ", filename);
+
+        ulong length = link.getContentLength();
+        writeln("Length = ", length);
         download(destination, link, url);
-        writeln();
-        writeln();
+        /*int chunks = 4;
+        foreach(i; 0 .. chunks)
+        {
+            ulong[] limits = length.calculateOffset(chunks, i);
+            string partialLink = format!"%s&range=%d-%d"(link, limits[0], limits[1]);
+            string partialDestination = format!"%s-%s-%d-%d.mp4.part"(
+                parser.getTitle(), parser.getID(), limits[0], limits[1]
+            ).sanitizePath();
+            string partialDestination = "";
+            download(partialDestination, partialLink, url);
+            writeln();
+            writeln();
+        }*/
+
+        //concatenateFiles();
     }
 }
+
