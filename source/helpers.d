@@ -40,7 +40,7 @@ void download(string destination, string url, string referer)
         http.onReceiveHeader = (in char[] header) {
             if(header.startsWith("Content-Length"))
             {
-                info("Length = ", header["Content-Length:".length + 1 .. $]);
+                //info("Length = ", header["Content-Length:".length + 1 .. $]);
             }
         };
     }
@@ -54,7 +54,7 @@ void download(string destination, string url, string referer)
         return 0;
     };
     auto result = http.perform();
-    logMessage("cURL result = ", result);
+    //logMessage("cURL result = ", result);
 }
 
 ulong getContentLength(string url)
@@ -141,7 +141,11 @@ string matchOrFail(Captures!string match)
 ulong[] calculateOffset(ulong length, int chunks, ulong index)
 {
     ulong start = index * (length / chunks);
-    ulong end = start + (length / chunks);
+    ulong end = chunks == index + 1 ? length : start + (length / chunks);
+    if(index > 0)
+    {
+        start++;
+    }
     return [start, end];
 }
 
@@ -149,7 +153,16 @@ unittest
 {
     ulong length = 20 * 1024 * 1024;
     assert([0, 5 * 1024 * 1024] == length.calculateOffset(4, 0));
-    assert([5 * 1024 * 1024, 10 * 1024 * 1024] == length.calculateOffset(4, 1));
-    assert([10 * 1024 * 1024, 15 * 1024 * 1024] == length.calculateOffset(4, 2));
-    assert([15 * 1024 * 1024, 20 * 1024 * 1024] == length.calculateOffset(4, 3));
+    assert([5 * 1024 * 1024 + 1, 10 * 1024 * 1024] == length.calculateOffset(4, 1));
+    assert([10 * 1024 * 1024 + 1, 15 * 1024 * 1024] == length.calculateOffset(4, 2));
+    assert([15 * 1024 * 1024 + 1, 20 * 1024 * 1024] == length.calculateOffset(4, 3));
+}
+
+unittest
+{
+    ulong length = 23;
+    assert([0, 5] == length.calculateOffset(4, 0));
+    assert([5 + 1, 10] == length.calculateOffset(4, 1));
+    assert([10 + 1, 15] == length.calculateOffset(4, 2));
+    assert([15 + 1, 23] == length.calculateOffset(4, 3));
 }

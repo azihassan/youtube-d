@@ -1,10 +1,12 @@
 import std.stdio : writeln;
-import std.algorithm : each;
+import std.parallelism : parallel;
+import std.algorithm : each, sort;
 import std.conv : to;
-import std.string : format;
-import std.file : getcwd, write;
+import std.string : format, split;
+import std.file : getcwd, write, append, read, remove;
 import std.net.curl : get;
 import std.path : buildPath;
+import std.range : iota;
 import std.getopt;
 
 import helpers;
@@ -70,22 +72,30 @@ void main(string[] args)
 
         ulong length = link.getContentLength();
         writeln("Length = ", length);
-        download(destination, link, url);
-        /*int chunks = 4;
-        foreach(i; 0 .. chunks)
+        int chunks = 4;
+        string[] destinations;
+        foreach(i, e; iota(0, chunks).parallel)
         {
-            ulong[] limits = length.calculateOffset(chunks, i);
-            string partialLink = format!"%s&range=%d-%d"(link, limits[0], limits[1]);
-            string partialDestination = format!"%s-%s-%d-%d.mp4.part"(
-                parser.getTitle(), parser.getID(), limits[0], limits[1]
+            ulong[] offsets = length.calculateOffset(chunks, i);
+            string partialLink = format!"%s&range=%d-%d"(link, offsets[0], offsets[1]);
+            string partialDestination = format!"%s-%s-%d-%d.mp4.part.%d"(
+                parser.getTitle(), parser.getID(), offsets[0], offsets[1], i
             ).sanitizePath();
-            string partialDestination = "";
+            destinations ~= partialDestination;
             download(partialDestination, partialLink, url);
-            writeln();
-            writeln();
-        }*/
+        }
 
-        //concatenateFiles();
+        concatenateFiles(destinations, destination);
     }
+}
+
+void concatenateFiles(string[] files, string destination)
+{
+    files.sort!((a, b) => a.split(".")[$ - 1].to!int < b.split(".")[$ -1].to!int);
+    foreach(file; files)
+    {
+        destination.append(file.read());
+    }
+    files.each!remove;
 }
 
