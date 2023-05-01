@@ -2,60 +2,9 @@ import std.logger : info;
 import std.regex : ctRegex, matchFirst, escaper, regex, Captures;
 import std.algorithm : filter;
 import std.conv : to;
-import std.file : readText, getcwd, exists, getSize, write;
-import std.net.curl : Curl, CurlOption, HTTP, options;
-import std.stdio : writef, writeln, File;
-import std.string : startsWith, indexOf, format, split;
-
-//video.mp4 20 MB
-//video-0-5.mp4.part
-//video-5-10.mp4.part
-//video-10-15.mp4.part
-//video-15-20.mp4.part
-//=>concatenate the files
-void download(string destination, string url, string referer)
-{
-    auto http = Curl();
-    http.initialize();
-    if(destination.exists)
-    {
-        writeln("Resuming from byte ", destination.getSize());
-        http.set(CurlOption.resume_from, destination.getSize());
-    }
-
-
-    auto file = File(destination, "ab");
-    http.set(CurlOption.url, url);
-    http.set(CurlOption.useragent, "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:95.0) Gecko/20100101 Firefox/95.0");
-    http.set(CurlOption.referer, referer);
-    http.set(CurlOption.followlocation, true);
-
-    http.onReceive = (ubyte[] data) {
-        file.rawWrite(data);
-        return data.length;
-    };
-
-    debug
-    {
-        http.onReceiveHeader = (in char[] header) {
-            if(header.startsWith("Content-Length"))
-            {
-                //info("Length = ", header["Content-Length:".length + 1 .. $]);
-            }
-        };
-    }
-    http.onProgress = (size_t total, size_t current, size_t _, size_t __) {
-        if(current == 0 || total == 0)
-        {
-            return 0;
-        }
-        auto percentage = 100.0 * (cast(float)(current) / total);
-        writef!"\r[%.2f %%] %.2f / %.2f MB"(percentage, current / 1024.0 / 1024.0, total / 1024.0 / 1024.0);
-        return 0;
-    };
-    auto result = http.perform();
-    //logMessage("cURL result = ", result);
-}
+import std.net.curl : HTTP;
+import std.stdio : writeln;
+import std.string : split;
 
 ulong getContentLength(string url)
 {
@@ -138,31 +87,3 @@ string matchOrFail(Captures!string match)
     return match[1];
 }
 
-ulong[] calculateOffset(ulong length, int chunks, ulong index)
-{
-    ulong start = index * (length / chunks);
-    ulong end = chunks == index + 1 ? length : start + (length / chunks);
-    if(index > 0)
-    {
-        start++;
-    }
-    return [start, end];
-}
-
-unittest
-{
-    ulong length = 20 * 1024 * 1024;
-    assert([0, 5 * 1024 * 1024] == length.calculateOffset(4, 0));
-    assert([5 * 1024 * 1024 + 1, 10 * 1024 * 1024] == length.calculateOffset(4, 1));
-    assert([10 * 1024 * 1024 + 1, 15 * 1024 * 1024] == length.calculateOffset(4, 2));
-    assert([15 * 1024 * 1024 + 1, 20 * 1024 * 1024] == length.calculateOffset(4, 3));
-}
-
-unittest
-{
-    ulong length = 23;
-    assert([0, 5] == length.calculateOffset(4, 0));
-    assert([5 + 1, 10] == length.calculateOffset(4, 1));
-    assert([10 + 1, 15] == length.calculateOffset(4, 2));
-    assert([15 + 1, 23] == length.calculateOffset(4, 3));
-}

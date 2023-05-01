@@ -1,9 +1,8 @@
 import std.stdio : writeln;
-import std.parallelism : parallel;
-import std.algorithm : each, sort;
+import std.algorithm : each;
 import std.conv : to;
-import std.string : format, split;
-import std.file : getcwd, write, append, read, remove;
+import std.string : format;
+import std.file : getcwd, write, getSize;
 import std.net.curl : get;
 import std.path : buildPath;
 import std.range : iota;
@@ -11,17 +10,20 @@ import std.getopt;
 
 import helpers;
 import parsers;
+import downloaders;
 
 void main(string[] args)
 {
     int itag;
     bool displayFormats;
+    bool parallel;
 
     auto help = args.getopt(
         std.getopt.config.passThrough,
         std.getopt.config.caseSensitive,
         "f", "Format to download (see -F for available formats)", &itag,
-        "F", "List available formats", &displayFormats
+        "F", "List available formats", &displayFormats,
+        "p|parallel", "Download in 4 parallel connections", &parallel
     );
 
     if(help.helpWanted || args.length == 1)
@@ -70,32 +72,18 @@ void main(string[] args)
 
         writeln("Downloading ", url, " to ", filename);
 
-        ulong length = link.getContentLength();
-        writeln("Length = ", length);
-        int chunks = 4;
-        string[] destinations;
-        foreach(i, e; iota(0, chunks).parallel)
+        Downloader downloader;
+        if(parallel)
         {
-            ulong[] offsets = length.calculateOffset(chunks, i);
-            string partialLink = format!"%s&range=%d-%d"(link, offsets[0], offsets[1]);
-            string partialDestination = format!"%s-%s-%d-%d.mp4.part.%d"(
-                parser.getTitle(), parser.getID(), offsets[0], offsets[1], i
-            ).sanitizePath();
-            destinations ~= partialDestination;
-            download(partialDestination, partialLink, url);
+            logMessage("Using ParallelDownloader");
+            downloader = new ParallelDownloader(parser.getID(), parser.getTitle());
         }
-
-        concatenateFiles(destinations, destination);
+        else
+        {
+            logMessage("Using RegularDownloader");
+            downloader = new RegularDownloader();
+        }
+        downloader.download(destination, link, url);
     }
-}
-
-void concatenateFiles(string[] files, string destination)
-{
-    files.sort!((a, b) => a.split(".")[$ - 1].to!int < b.split(".")[$ -1].to!int);
-    foreach(file; files)
-    {
-        destination.append(file.read());
-    }
-    files.each!remove;
 }
 
