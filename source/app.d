@@ -36,6 +36,7 @@ void main(string[] args)
 
     foreach(url; urls)
     {
+        writeln("Handling ", url);
         string html = url.get().idup;
         writeln("Downloaded video HTML");
         write("tmp.html", html);

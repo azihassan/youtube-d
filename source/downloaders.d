@@ -76,7 +76,7 @@ class ParallelDownloader : Downloader
         ulong length = url.getContentLength();
         writeln("Length = ", length);
         int chunks = 4;
-        string[] destinations;
+        string[] destinations = new string[chunks];
         foreach(i, e; iota(0, chunks).parallel)
         {
             ulong[] offsets = calculateOffset(length, chunks, i);
@@ -84,7 +84,7 @@ class ParallelDownloader : Downloader
             string partialDestination = format!"%s-%s-%d-%d.mp4.part.%d"(
                 title, id, offsets[0], offsets[1], i
             ).sanitizePath();
-            destinations ~= partialDestination;
+            destinations[i] = partialDestination;
             new RegularDownloader().download(partialDestination, partialLink, url);
         }
 
