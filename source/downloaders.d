@@ -15,6 +15,13 @@ interface Downloader
 
 class RegularDownloader : Downloader
 {
+    private int delegate(ulong length, ulong currentLength) onProgress;
+
+    this(int delegate(ulong length, ulong currentLength) onProgress)
+    {
+        this.onProgress = onProgress;
+    }
+
     public void download(string destination, string url, string referer)
     {
         auto http = Curl();
@@ -47,13 +54,7 @@ class RegularDownloader : Downloader
             };
         }
         http.onProgress = (size_t total, size_t current, size_t _, size_t __) {
-            if(current == 0 || total == 0)
-            {
-                return 0;
-            }
-            auto percentage = 100.0 * (cast(float)(current) / total);
-            writef!"\r[%.2f %%] %.2f / %.2f MB"(percentage, current / 1024.0 / 1024.0, total / 1024.0 / 1024.0);
-            return 0;
+            return onProgress(total, current);
         };
         auto result = http.perform();
         //logMessage("cURL result = ", result);
@@ -85,7 +86,17 @@ class ParallelDownloader : Downloader
                 title, id, offsets[0], offsets[1], i
             ).sanitizePath();
             destinations[i] = partialDestination;
-            new RegularDownloader().download(partialDestination, partialLink, url);
+
+            new RegularDownloader((ulong _, ulong __) {
+                if(length == 0)
+                {
+                    return 0;
+                }
+                ulong current = destinations.map!(d => d.exists() ? d.getSize() : 0).sum();
+                auto percentage = 100.0 * (cast(float)(current) / length);
+                writef!"\r[%.2f %%] %.2f / %.2f MB"(percentage, current / 1024.0 / 1024.0, length / 1024.0 / 1024.0);
+                return 0;
+            }).download(partialDestination, partialLink, url);
         }
 
         writeln("Chunk size sum : ", destinations.map!(d => d.getSize()).sum());

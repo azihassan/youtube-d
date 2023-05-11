@@ -1,4 +1,4 @@
-import std.stdio : writeln;
+import std.stdio : writef, writeln;
 import std.algorithm : each;
 import std.conv : to;
 import std.string : format;
@@ -82,7 +82,15 @@ void main(string[] args)
         else
         {
             logMessage("Using RegularDownloader");
-            downloader = new RegularDownloader();
+            downloader = new RegularDownloader((size_t total, size_t current) {
+                if(current == 0 || total == 0)
+                {
+                    return 0;
+                }
+                auto percentage = 100.0 * (cast(float)(current) / total);
+                writef!"\r[%.2f %%] %.2f / %.2f MB"(percentage, current / 1024.0 / 1024.0, total / 1024.0 / 1024.0);
+                return 0;
+            });
         }
         downloader.download(destination, link, url);
     }
