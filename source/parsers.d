@@ -28,7 +28,13 @@ abstract class YoutubeVideoURLExtractor
 
     public string getID()
     {
-        return parser.querySelector("meta[itemprop=videoId]").attr("content").idup;
+        //return parser.querySelector("meta[itemprop=videoId], meta[itemprop=identifier]").attr("content").idup;
+        auto meta = parser.querySelector("meta[itemprop=videoId]");
+        if(meta is null)
+        {
+            meta = parser.querySelector("meta[itemprop=identifier]");
+        }
+        return meta.attr("content").idup;
     }
 
     public YoutubeFormat[] getFormats()
@@ -74,6 +80,7 @@ class SimpleYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
 
 unittest
 {
+    writeln("Should parse video URL and metadata from regular videos");
     string html = readText("zoz.html");
     auto extractor = new SimpleYoutubeVideoURLExtractor(html);
 
@@ -84,6 +91,15 @@ unittest
     assert(extractor.getTitle() == "اللوبيا المغربية ديال دار سهلة و بنينة سخونة و حنينة");
 
     assert(extractor.getID() == "sif2JVDhZrQ");
+}
+
+unittest
+{
+    writeln("Should parse ID correctly (itemprop = 'identifier' version)");
+    string html = readText("identifier.html");
+    auto extractor = new SimpleYoutubeVideoURLExtractor(html);
+
+    assert(extractor.getID() == "Q_-p2q5FHy0");
 }
 
 struct YoutubeFormat
@@ -106,6 +122,7 @@ struct YoutubeFormat
 
 unittest
 {
+    writeln("Should parse video formats");
     string html = readText("zoz.html");
     auto extractor = new SimpleYoutubeVideoURLExtractor(html);
 
@@ -178,6 +195,7 @@ class AdvancedYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
 
 unittest
 {
+    writeln("Should parse video formats from VEVO videos");
     string html = readText("dQ.html");
     auto extractor = new AdvancedYoutubeVideoURLExtractor(html, "");
 
@@ -212,6 +230,7 @@ unittest
 
 unittest
 {
+    writeln("Should parse video URL and metadata from VEVO videos");
     string html = readText("dQw4w9WgXcQ.html");
     string baseJS = readText("base.min.js");
     auto extractor = new AdvancedYoutubeVideoURLExtractor(html, baseJS);
@@ -247,6 +266,7 @@ YoutubeVideoURLExtractor makeParser(string html, string function(string) perform
 
 unittest
 {
+    writeln("When video is VEVO song, should create advanced parser");
     string html = "dQ.html".readText();
     auto parser = makeParser(html, url => "");
     assert(cast(AdvancedYoutubeVideoURLExtractor) parser);
@@ -255,6 +275,7 @@ unittest
 
 unittest
 {
+    writeln("When video regular should create simple parser");
     string html = "zoz.html".readText();
     auto parser = makeParser(html, url => "");
     assert(cast(SimpleYoutubeVideoURLExtractor) parser);
@@ -268,6 +289,7 @@ string parseBaseJSURL(string html)
 
 unittest
 {
+    writeln("Should parse base.js URL");
     assert("https://www.youtube.com/s/player/59acb1f3/player_ias.vflset/ar_EG/base.js" == "dQ.html".readText().parseBaseJSURL());
     assert("https://www.youtube.com/s/player/7862ca1f/player_ias.vflset/ar_EG/base.js" == "dQw4w9WgXcQ.html".readText().parseBaseJSURL());
 }
@@ -363,6 +385,7 @@ struct EncryptionAlgorithm
 
 unittest
 {
+    writeln("When video is VEVO song, should correctly decrypt video signature");
     auto algorithm = EncryptionAlgorithm("base.min.js".readText());
     string signature = algorithm.decrypt("L%3D%3DgKKNERRt_lv67W%3DvA4fU6N2qzrARSUbfqeXlAL827irDQICgwCLRfLgHEW2t5_GLJtRC-yoiR8sy0JR-uqLLRJlLJbgIQRw8JQ0qO1");
     assert(signature == "AOq0QJ8wRQIgbJLlJRLLqu-RJ0ys8Rioy-CRtJLG_5t2WEHgLfRLCwgCIQDri728L1lXeqfbUSRArzq2N6Uf4AvLW76vl_tRRENKKg%3D%3D");
