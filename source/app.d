@@ -33,6 +33,8 @@ void main(string[] args)
     foreach(url; urls)
     {
         string html = url.get().idup;
+        writeln("Downloaded video HTML");
+        write("tmp.html", html);
         YoutubeVideoURLExtractor parser = makeParser(html);
         if(displayFormats)
         {
@@ -42,9 +44,14 @@ void main(string[] args)
             continue;
         }
 
+        parser.getID().writeln();
+        parser.getTitle().writeln();
         string filename = format!"%s-%s.mp4"(parser.getTitle(), parser.getID()).sanitizePath();
+        filename.writeln();
         string destination = buildPath(getcwd(), filename);
+        destination.writeln();
         string link = parser.getURL(itag);
+        link.writeln();
 
         debug
         {
