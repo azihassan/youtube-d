@@ -1,25 +1,29 @@
-import std.stdio : writeln;
+import std.stdio : writef, writeln;
 import std.algorithm : each;
 import std.conv : to;
 import std.string : format;
-import std.file : getcwd, write;
+import std.file : getcwd, write, getSize;
 import std.net.curl : get;
 import std.path : buildPath;
+import std.range : iota;
 import std.getopt;
 
 import helpers;
 import parsers;
+import downloaders;
 
 void main(string[] args)
 {
     int itag;
     bool displayFormats;
+    bool parallel;
 
     auto help = args.getopt(
         std.getopt.config.passThrough,
         std.getopt.config.caseSensitive,
         "f", "Format to download (see -F for available formats)", &itag,
-        "F", "List available formats", &displayFormats
+        "F", "List available formats", &displayFormats,
+        "p|parallel", "Download in 4 parallel connections", &parallel
     );
 
     if(help.helpWanted || args.length == 1)
@@ -32,6 +36,7 @@ void main(string[] args)
 
     foreach(url; urls)
     {
+        writeln("Handling ", url);
         string html = url.get().idup;
         writeln("Downloaded video HTML");
         write("tmp.html", html);
@@ -67,8 +72,27 @@ void main(string[] args)
         }
 
         writeln("Downloading ", url, " to ", filename);
-        download(destination, link, url);
-        writeln();
-        writeln();
+
+        Downloader downloader;
+        if(parallel)
+        {
+            logMessage("Using ParallelDownloader");
+            downloader = new ParallelDownloader(parser.getID(), parser.getTitle());
+        }
+        else
+        {
+            logMessage("Using RegularDownloader");
+            downloader = new RegularDownloader((size_t total, size_t current) {
+                if(current == 0 || total == 0)
+                {
+                    return 0;
+                }
+                auto percentage = 100.0 * (cast(float)(current) / total);
+                writef!"\r[%.2f %%] %.2f / %.2f MB"(percentage, current / 1024.0 / 1024.0, total / 1024.0 / 1024.0);
+                return 0;
+            });
+        }
+        downloader.download(destination, link, url);
     }
 }
+
