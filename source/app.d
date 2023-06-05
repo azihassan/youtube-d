@@ -14,15 +14,17 @@ import downloaders;
 
 void main(string[] args)
 {
-    int itag;
+    int itag = 18;
     bool displayFormats;
     bool parallel;
+    bool outputURL;
 
     auto help = args.getopt(
         std.getopt.config.passThrough,
         std.getopt.config.caseSensitive,
         "f", "Format to download (see -F for available formats)", &itag,
         "F", "List available formats", &displayFormats,
+        "o|output-url", "Display extracted video URL without downloading it", &outputURL,
         "p|parallel", "Download in 4 parallel connections", &parallel
     );
 
@@ -56,7 +58,6 @@ void main(string[] args)
         string destination = buildPath(getcwd(), filename);
         destination.writeln();
         string link = parser.getURL(itag);
-        link.writeln();
 
         debug
         {
@@ -68,6 +69,11 @@ void main(string[] args)
         if(link == "")
         {
             writeln("Failed to parse video URL");
+            continue;
+        }
+        if(outputURL)
+        {
+            link.writeln();
             continue;
         }
 
