@@ -1,9 +1,8 @@
-import std.logger : info;
+import std.logger;
 import std.regex : ctRegex, matchFirst, escaper, regex, Captures;
 import std.algorithm : filter;
 import std.conv : to;
 import std.net.curl : HTTP;
-import std.stdio : writeln;
 import std.string : split;
 
 ulong getContentLength(string url)
@@ -12,7 +11,6 @@ ulong getContentLength(string url)
     http.method = HTTP.Method.head;
     http.addRequestHeader("User-Agent", "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:95.0) Gecko/20100101 Firefox/95.0");
     http.perform();
-    writeln(http.responseHeaders);
     return http.responseHeaders["content-length"].to!ulong;
 }
 
@@ -56,24 +54,16 @@ unittest
     assert(received == expected);
 }
 
-void logMessage(S...)(S message)
-{
-    debug
-    {
-        info(message);
-    }
-}
-
 string matchOrFail(string pattern, bool escape = false)(string source)
 {
-    logMessage("Matching ", pattern);
+    trace("Matching ", pattern);
     auto regex = ctRegex!(escape ? pattern.escaper.to!string : pattern);
     return source.matchFirst(regex).matchOrFail();
 }
 
 string matchOrFail(string source, string pattern)
 {
-    logMessage("Matching ", pattern);
+    trace("Matching ", pattern);
     auto regex = regex(pattern);
     return source.matchFirst(regex).matchOrFail();
 }

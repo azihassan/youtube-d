@@ -9,8 +9,9 @@ import std.array : replace;
 import std.file : readText;
 import std.string : indexOf, format, lastIndexOf, split, strip;
 import std.algorithm : reverse, map;
+import std.logger;
 
-import helpers : logMessage, parseQueryString, matchOrFail;
+import helpers : parseQueryString, matchOrFail;
 
 import html;
 
@@ -257,7 +258,7 @@ YoutubeVideoURLExtractor makeParser(string html, string function(string) perform
     if(html.canFind("signatureCipher"))
     {
         string baseJSURL = html.parseBaseJSURL();
-        logMessage("Found base.js URL = ", baseJSURL);
+        trace("Found base.js URL = ", baseJSURL);
         string baseJS = performGETRequest(baseJSURL);
         return new AdvancedYoutubeVideoURLExtractor(html, baseJS);
     }
@@ -307,7 +308,7 @@ struct EncryptionAlgorithm
         this.javascript = javascript;
 
         string algorithm = javascript.matchOrFail!(`a\s*=\s*a\.split\(""\);\s*((.|\s)*?);\s*return a\.join\(""\)`, false);
-        logMessage("Matched algorithm = ", algorithm);
+        trace("Matched algorithm = ", algorithm);
         string[] steps = algorithm.split(";");
         foreach(step; steps.map!strip)
         {
@@ -315,7 +316,7 @@ struct EncryptionAlgorithm
             ulong argument = step[step.indexOf(',') + 1 .. step.indexOf(')')].strip().to!ulong;
             this.steps ~= tuple(functionName, argument);
         }
-        logMessage("Parsed steps : ", this.steps);
+        trace("Parsed steps : ", this.steps);
         parseStepFunctionNames();
     }
 
@@ -324,9 +325,9 @@ struct EncryptionAlgorithm
         char[] copy = signatureCipher.decodeComponent.dup;
         foreach(step; steps)
         {
-            logMessage(step);
-            logMessage(obfuscatedStepFunctionNames);
-            logMessage("before step = ", copy);
+            trace(step);
+            trace(obfuscatedStepFunctionNames);
+            trace("before step = ", copy);
             switch(obfuscatedStepFunctionNames[step[0]])
             {
                 case "flip":
@@ -344,7 +345,7 @@ struct EncryptionAlgorithm
                 default:
                     assert(0);
             }
-            logMessage("after step = ", copy);
+            trace("after step = ", copy);
         }
         return copy.encodeComponent.idup;
     }
@@ -352,13 +353,13 @@ struct EncryptionAlgorithm
     private void parseStepFunctionNames()
     {
         string flip = javascript.matchOrFail!(`([A-Za-z]{2}):function\(a\)\{a\.reverse\(\)\}`);
-        logMessage("Matched flip = ", flip);
+        trace("Matched flip = ", flip);
 
         string removeFromStart = javascript.matchOrFail!(`([A-Za-z]{2}):function\(a,b\)\{a\.splice\(0,b\)\}`);
-        logMessage("Matched removeFromStart = ", removeFromStart);
+        trace("Matched removeFromStart = ", removeFromStart);
 
         string swapFirstCharacterWith = javascript.matchOrFail!(`([A-Za-z]{2}):function\(a,b\)\{var c=a\[0\];a\[0\]=a\[b%a\.length\];a\[b%a\.length\]=c\}`);
-        logMessage("Matched swapFirstCharacterWith = ", swapFirstCharacterWith);
+        trace("Matched swapFirstCharacterWith = ", swapFirstCharacterWith);
 
         obfuscatedStepFunctionNames[flip] = "flip";
         obfuscatedStepFunctionNames[swapFirstCharacterWith] = "swapFirstCharacterWith";

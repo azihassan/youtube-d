@@ -1,4 +1,4 @@
-import std.stdio : writef, writeln, File;
+import std.stdio : writef, File;
 import std.parallelism : parallel;
 import std.algorithm : each, sort, sum, map;
 import std.conv : to;
@@ -6,6 +6,7 @@ import std.string : startsWith, indexOf, format, split;
 import std.file : append, exists, read, remove, getSize;
 import std.range : iota;
 import std.net.curl : Curl, CurlOption;
+import std.logger;
 import helpers : getContentLength, sanitizePath;
 
 interface Downloader
@@ -28,7 +29,7 @@ class RegularDownloader : Downloader
         http.initialize();
         if(destination.exists)
         {
-            writeln("Resuming from byte ", destination.getSize());
+            info("Resuming from byte ", destination.getSize());
             http.set(CurlOption.resume_from, destination.getSize());
         }
 
@@ -44,20 +45,10 @@ class RegularDownloader : Downloader
             return data.length;
         };
 
-        debug
-        {
-            http.onReceiveHeader = (in char[] header) {
-                if(header.startsWith("Content-Length"))
-                {
-                    //info("Length = ", header["Content-Length:".length + 1 .. $]);
-                }
-            };
-        }
         http.onProgress = (size_t total, size_t current, size_t _, size_t __) {
             return onProgress(total, current);
         };
         auto result = http.perform();
-        //logMessage("cURL result = ", result);
     }
 }
 
@@ -75,7 +66,7 @@ class ParallelDownloader : Downloader
     public void download(string destination, string url, string referer)
     {
         ulong length = url.getContentLength();
-        writeln("Length = ", length);
+        trace("Length = ", length);
         int chunks = 4;
         string[] destinations = new string[chunks];
         foreach(i, e; iota(0, chunks).parallel)
@@ -99,11 +90,11 @@ class ParallelDownloader : Downloader
             }).download(partialDestination, partialLink, url);
         }
 
-        writeln("Chunk size sum : ", destinations.map!(d => d.getSize()).sum());
-        writeln("Expected size : ", length);
+        trace("Chunk size sum : ", destinations.map!(d => d.getSize()).sum());
+        trace("Expected size : ", length);
         if(destinations.map!(d => d.getSize()).sum() == length)
         {
-            writeln("Sizes match; concatenating files...");
+            trace("Sizes match; concatenating files...");
             concatenateFiles(destinations, destination);
         }
     }

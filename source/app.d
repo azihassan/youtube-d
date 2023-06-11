@@ -1,4 +1,4 @@
-import std.stdio : writef, writeln;
+import std.stdio : writef;
 import std.algorithm : each;
 import std.conv : to;
 import std.string : format;
@@ -6,11 +6,12 @@ import std.file : getcwd, write, getSize;
 import std.net.curl : get;
 import std.path : buildPath;
 import std.range : iota;
+import std.logger;
 import std.getopt;
 
-import helpers;
 import parsers;
 import downloaders;
+import helpers;
 
 void main(string[] args)
 {
@@ -18,6 +19,7 @@ void main(string[] args)
     bool displayFormats;
     bool parallel;
     bool outputURL;
+    bool verbose;
 
     auto help = args.getopt(
         std.getopt.config.passThrough,
@@ -25,7 +27,8 @@ void main(string[] args)
         "f", "Format to download (see -F for available formats)", &itag,
         "F", "List available formats", &displayFormats,
         "o|output-url", "Display extracted video URL without downloading it", &outputURL,
-        "p|parallel", "Download in 4 parallel connections", &parallel
+        "p|parallel", "Download in 4 parallel connections", &parallel,
+        "v|verbose", "Display debugging messages", &verbose
     );
 
     if(help.helpWanted || args.length == 1)
@@ -38,56 +41,55 @@ void main(string[] args)
 
     foreach(url; urls)
     {
-        writeln("Handling ", url);
+        info("Handling ", url);
         string html = url.get().idup;
-        writeln("Downloaded video HTML");
-        write("tmp.html", html);
+        trace("Downloaded video HTML");
         YoutubeVideoURLExtractor parser = makeParser(html);
         if(displayFormats)
         {
-            writeln("Available formats for ", url);
-            parser.getFormats().each!writeln;
-            writeln();
+            info("Available formats for ", url);
+            parser.getFormats().each!info;
+            info();
             continue;
         }
 
-        parser.getID().writeln();
-        parser.getTitle().writeln();
+        parser.getID().trace();
+        parser.getTitle().info();
         string filename = format!"%s-%s.mp4"(parser.getTitle(), parser.getID()).sanitizePath();
-        filename.writeln();
+        filename.info();
         string destination = buildPath(getcwd(), filename);
-        destination.writeln();
+        destination.info();
         string link = parser.getURL(itag);
 
         debug
         {
-            write(parser.getID() ~ ".html", html);
-            writeln("Found link : ", link);
-            writeln();
+            trace(parser.getID() ~ ".html", html);
+            trace("Found link : ", link);
+            trace();
         }
 
         if(link == "")
         {
-            writeln("Failed to parse video URL");
+            error("Failed to parse video URL");
             continue;
         }
         if(outputURL)
         {
-            link.writeln();
+            link.info();
             continue;
         }
 
-        writeln("Downloading ", url, " to ", filename);
+        info("Downloading ", url, " to ", filename);
 
         Downloader downloader;
         if(parallel)
         {
-            logMessage("Using ParallelDownloader");
+            trace("Using ParallelDownloader");
             downloader = new ParallelDownloader(parser.getID(), parser.getTitle());
         }
         else
         {
-            logMessage("Using RegularDownloader");
+            trace("Using RegularDownloader");
             downloader = new RegularDownloader((size_t total, size_t current) {
                 if(current == 0 || total == 0)
                 {
