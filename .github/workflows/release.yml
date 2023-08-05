@@ -1,0 +1,27 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v1
+
+    - uses: mihails-strasuns/setup-dlang@v1
+      name: Install DMD
+
+    - name: Build
+      run: dub build
+
+    - uses: actions/upload-artifact@v3
+      with:
+        name: youtube-d
+        path: youtube-d
+
+
+
