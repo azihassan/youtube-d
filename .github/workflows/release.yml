@@ -1,27 +1,42 @@
-name: Build
+name: Release
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - 'v*'
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
+  release:
+    runs-on: ubuntu-18.04
 
     steps:
-    - uses: actions/checkout@v1
+      - uses: actions/checkout@v1
 
-    - uses: mihails-strasuns/setup-dlang@v1
-      name: Install DMD
+      - uses: mihails-strasuns/setup-dlang@v1
+        name: Install DMD
 
-    - name: Build
-      run: dub build
+      - name: Build release
+        run: dub build -b release
 
-    - uses: actions/upload-artifact@v3
-      with:
-        name: youtube-d
-        path: youtube-d
+      - name: Create release
+        uses: actions/create-release@v1
+        id: create_release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: New release of youtube-d ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          body_path: CHANGELOG.md
 
-
+      - name: Upload release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./youtube-d
+          asset_name: youtube-d-${{ github.ref_name }}
+          asset_content_type: application/octet-stream
 
