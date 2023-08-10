@@ -8,5 +8,8 @@
 	},
 	"description": "Youtube downloader",
 	"license": "MIT",
-	"name": "youtube-d"
+	"name": "youtube-d",
+        "dflags": [
+            "-mtriple=x86_64-linux-gnu"
+        ]
 }

@@ -7,16 +7,18 @@ on:
 
 jobs:
   release:
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v1
 
-      - uses: mihails-strasuns/setup-dlang@v1
-        name: Install DMD
+      - uses: dlang-community/setup-dlang@v1
+        name: Install LDC
+        with:
+          compiler: ldc-latest
 
       - name: Build release
-        run: dub build -b release
+        run: dub build -b release --compiler=ldc2
 
       - name: Create release
         uses: actions/create-release@v1
