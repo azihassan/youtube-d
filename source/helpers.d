@@ -1,4 +1,5 @@
 import std.logger;
+import std.stdio : writeln, writefln, File, stdout;
 import std.regex : ctRegex, matchFirst, escaper, regex, Captures;
 import std.algorithm : filter;
 import std.conv : to;
@@ -77,3 +78,68 @@ string matchOrFail(Captures!string match)
     return match[1];
 }
 
+class StdoutLogger : Logger
+{
+    private bool verbose;
+    private File stream;
+
+    this(bool verbose = false, File stream = stdout) @safe
+    {
+        super(LogLevel.info);
+        this.verbose = verbose;
+        this.stream = stream;
+    }
+
+    void displayVerbose(S...)(S message)
+    {
+        if(this.verbose)
+        {
+            log(message);
+        }
+    }
+
+    void display(S...)(S message)
+    {
+        log(message);
+    }
+
+    override void writeLogMsg(ref LogEntry payload)
+    {
+        stream.writeln(payload.msg);
+    }
+}
+
+version(unittest)
+{
+    import std.file : readText;
+    import std.string : splitLines, strip;
+}
+
+unittest
+{
+    writeln("Should log verbose output in verbose mode");
+    auto logs = File("logs.txt", "w");
+    auto logger = new StdoutLogger(true, logs);
+    logger.displayVerbose("should log this verbose message");
+    logger.display("should log this message");
+    logs.flush();
+
+    assert("logs.txt".readText().strip().splitLines() == [
+            "should log this verbose message",
+            "should log this message"
+    ]);
+}
+
+unittest
+{
+    writeln("Should skip verbose output in non verbose mode");
+    auto logs = File("logs.txt", "w");
+    auto logger = new StdoutLogger(false, logs);
+    logger.displayVerbose("should skip this verbose message");
+    logger.display("should log this message");
+    logs.flush();
+
+    assert("logs.txt".readText().splitLines() == [
+            "should log this message"
+    ]);
+}

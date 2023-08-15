@@ -1,4 +1,4 @@
-import std.stdio : writef, File;
+import std.stdio : writef, writeln, File;
 import std.parallelism : parallel;
 import std.algorithm : each, sort, sum, map;
 import std.conv : to;
@@ -6,8 +6,7 @@ import std.string : startsWith, indexOf, format, split;
 import std.file : append, exists, read, remove, getSize;
 import std.range : iota;
 import std.net.curl : Curl, CurlOption;
-import std.logger;
-import helpers : getContentLength, sanitizePath;
+import helpers : getContentLength, sanitizePath, StdoutLogger;
 
 interface Downloader
 {
@@ -16,10 +15,12 @@ interface Downloader
 
 class RegularDownloader : Downloader
 {
+    private StdoutLogger logger;
     private int delegate(ulong length, ulong currentLength) onProgress;
 
-    this(int delegate(ulong length, ulong currentLength) onProgress)
+    this(StdoutLogger logger, int delegate(ulong length, ulong currentLength) onProgress)
     {
+        this.logger = logger;
         this.onProgress = onProgress;
     }
 
@@ -29,7 +30,7 @@ class RegularDownloader : Downloader
         http.initialize();
         if(destination.exists)
         {
-            info("Resuming from byte ", destination.getSize());
+            logger.display("Resuming from byte ", destination.getSize());
             http.set(CurlOption.resume_from, destination.getSize());
         }
 
@@ -54,19 +55,21 @@ class RegularDownloader : Downloader
 
 class ParallelDownloader : Downloader
 {
-    string id;
-    string title;
+    private StdoutLogger logger;
+    private string id;
+    private string title;
 
-    this(string id, string title)
+    this(StdoutLogger logger, string id, string title)
     {
         this.id = id;
         this.title = title;
+        this.logger = logger;
     }
 
     public void download(string destination, string url, string referer)
     {
         ulong length = url.getContentLength();
-        trace("Length = ", length);
+        logger.displayVerbose("Length = ", length);
         int chunks = 4;
         string[] destinations = new string[chunks];
         foreach(i, e; iota(0, chunks).parallel)
@@ -78,7 +81,7 @@ class ParallelDownloader : Downloader
             ).sanitizePath();
             destinations[i] = partialDestination;
 
-            new RegularDownloader((ulong _, ulong __) {
+            new RegularDownloader(logger, (ulong _, ulong __) {
                 if(length == 0)
                 {
                     return 0;
@@ -90,11 +93,12 @@ class ParallelDownloader : Downloader
             }).download(partialDestination, partialLink, url);
         }
 
-        trace("Chunk size sum : ", destinations.map!(d => d.getSize()).sum());
-        trace("Expected size : ", length);
+        writeln();
+        logger.displayVerbose("Chunk size sum : ", destinations.map!(d => d.getSize()).sum());
+        logger.displayVerbose("Expected size : ", length);
         if(destinations.map!(d => d.getSize()).sum() == length)
         {
-            trace("Sizes match; concatenating files...");
+            logger.display("Concatenating partial files...");
             concatenateFiles(destinations, destination);
         }
     }
@@ -122,7 +126,7 @@ class ParallelDownloader : Downloader
 
     unittest
     {
-        auto downloader = new ParallelDownloader("", "");
+        auto downloader = new ParallelDownloader(new StdoutLogger(), "", "");
         ulong length = 20 * 1024 * 1024;
         assert([0, 5 * 1024 * 1024] == downloader.calculateOffset(length, 4, 0));
         assert([5 * 1024 * 1024 + 1, 10 * 1024 * 1024] == downloader.calculateOffset(length, 4, 1));
@@ -132,7 +136,7 @@ class ParallelDownloader : Downloader
 
     unittest
     {
-        auto downloader = new ParallelDownloader("", "");
+        auto downloader = new ParallelDownloader(new StdoutLogger(), "", "");
         ulong length = 23;
         assert([0, 5] == downloader.calculateOffset(length, 4, 0));
         assert([5 + 1, 10] == downloader.calculateOffset(length, 4, 1));

@@ -1,4 +1,4 @@
-import std.stdio : writef;
+import std.stdio : writef, stdout, writeln;
 import std.algorithm : each;
 import std.conv : to;
 import std.string : format;
@@ -37,60 +37,59 @@ void main(string[] args)
         return;
     }
 
+    writeln("Verbose mode : ", verbose);
+
+    auto logger = new StdoutLogger(verbose);
     string[] urls = args[1 .. $];
 
     foreach(url; urls)
     {
-        info("Handling ", url);
+        logger.display("Handling ", url);
         string html = url.get().idup;
-        trace("Downloaded video HTML");
-        YoutubeVideoURLExtractor parser = makeParser(html);
+        logger.displayVerbose("Downloaded video HTML");
+        YoutubeVideoURLExtractor parser = makeParser(html, logger);
         if(displayFormats)
         {
-            info("Available formats for ", url);
-            parser.getFormats().each!info;
-            info();
+            logger.display("Available formats for ", url);
+            parser.getFormats().each!(format => logger.display(format));
+            logger.display();
             continue;
         }
 
-        parser.getID().trace();
-        parser.getTitle().info();
+        logger.display(parser.getID());
+        logger.display(parser.getTitle());
         string filename = format!"%s-%s.mp4"(parser.getTitle(), parser.getID()).sanitizePath();
-        filename.info();
+        logger.displayVerbose(filename);
         string destination = buildPath(getcwd(), filename);
-        destination.info();
+        logger.displayVerbose(destination);
         string link = parser.getURL(itag);
 
-        debug
-        {
-            trace(parser.getID() ~ ".html", html);
-            trace("Found link : ", link);
-            trace();
-        }
+        logger.displayVerbose(parser.getID() ~ ".html");
+        logger.displayVerbose("Found link : ", link);
 
         if(link == "")
         {
-            error("Failed to parse video URL");
+            logger.error("Failed to parse video URL");
             continue;
         }
         if(outputURL)
         {
-            link.info();
+            logger.display(link);
             continue;
         }
 
-        info("Downloading ", url, " to ", filename);
+        logger.display("Downloading ", url, " to ", filename);
 
         Downloader downloader;
         if(parallel)
         {
-            trace("Using ParallelDownloader");
-            downloader = new ParallelDownloader(parser.getID(), parser.getTitle());
+            logger.display("Using ParallelDownloader");
+            downloader = new ParallelDownloader(logger, parser.getID(), parser.getTitle());
         }
         else
         {
-            trace("Using RegularDownloader");
-            downloader = new RegularDownloader((size_t total, size_t current) {
+            logger.display("Using RegularDownloader");
+            downloader = new RegularDownloader(logger, (size_t total, size_t current) {
                 if(current == 0 || total == 0)
                 {
                     return 0;
