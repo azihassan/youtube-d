@@ -10,7 +10,7 @@ import std.file : readText;
 import std.string : indexOf, format, lastIndexOf, split, strip;
 import std.algorithm : reverse, map;
 
-import helpers : logMessage, parseQueryString, matchOrFail;
+import helpers : parseQueryString, matchOrFail, StdoutLogger;
 
 import html;
 
@@ -64,9 +64,11 @@ abstract class YoutubeVideoURLExtractor
 
 class SimpleYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
 {
-    this(string html)
+    private StdoutLogger logger;
+    this(string html, StdoutLogger logger)
     {
         this.html = html;
+        this.logger = logger;
         parser = createDocument(html);
     }
 
@@ -82,7 +84,7 @@ unittest
 {
     writeln("Should parse video URL and metadata from regular videos");
     string html = readText("zoz.html");
-    auto extractor = new SimpleYoutubeVideoURLExtractor(html);
+    auto extractor = new SimpleYoutubeVideoURLExtractor(html, new StdoutLogger());
 
     assert(extractor.getURL(18) == "https://r4---sn-f5o5-jhol.googlevideo.com/videoplayback?expire=1638935038&ei=ntWvYYf_NZiJmLAPtfySkAc&ip=105.66.6.95&id=o-AG7BUTPMmXcFJCtiIUgzrYXlgliHnrjn8IT0b4D_2u8U&itag=18&source=youtube&requiressl=yes&mh=Zy&mm=31%2C29&mn=sn-f5o5-jhol%2Csn-h5qzen7s&ms=au%2Crdu&mv=m&mvi=4&pl=24&initcwndbps=112500&vprv=1&mime=video%2Fmp4&ns=oWqcgbo-7-88Erb0vfdQlB0G&gir=yes&clen=39377316&ratebypass=yes&dur=579.012&lmt=1638885608167129&mt=1638913037&fvip=4&fexp=24001373%2C24007246&c=WEB&txp=3310222&n=RCgHqivzcADgV0inFcU&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cvprv%2Cmime%2Cns%2Cgir%2Cclen%2Cratebypass%2Cdur%2Clmt&sig=AOq0QJ8wRQIhAP5RM2aRT03WZPwBGRWRs25p6T03kecAfGoqqU1tQt0TAiAW-sbLCLqKm9XATrjmhgB5yIlGUeGF1WiWGWvFcVWgkA%3D%3D&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=AG3C_xAwRgIhAJNGheTpD9UVxle1Q9ECIhRMs7Cfl9ZZtqifKo81o-XRAiEAyYKhi3IBXMhIfPyvfpwmj069jMAhaxapC1IhDCl4k90%3D");
 
@@ -97,7 +99,7 @@ unittest
 {
     writeln("Should parse ID correctly (itemprop = 'identifier' version)");
     string html = readText("identifier.html");
-    auto extractor = new SimpleYoutubeVideoURLExtractor(html);
+    auto extractor = new SimpleYoutubeVideoURLExtractor(html, new StdoutLogger());
 
     assert(extractor.getID() == "Q_-p2q5FHy0");
 }
@@ -124,7 +126,7 @@ unittest
 {
     writeln("Should parse video formats");
     string html = readText("zoz.html");
-    auto extractor = new SimpleYoutubeVideoURLExtractor(html);
+    auto extractor = new SimpleYoutubeVideoURLExtractor(html, new StdoutLogger());
 
     YoutubeFormat[] formats = extractor.getFormats();
     assert(formats.length == 18);
@@ -152,19 +154,21 @@ unittest
 class AdvancedYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
 {
     private string baseJS;
+    private StdoutLogger logger;
 
-    this(string html, string baseJS)
+    this(string html, string baseJS, StdoutLogger logger)
     {
         this.html = html;
         this.parser = createDocument(html);
         this.baseJS = baseJS;
+        this.logger = logger;
     }
 
     override string getURL(int itag = 18)
     {
         string signatureCipher = findSignatureCipher(itag);
         string[string] params = signatureCipher.parseQueryString();
-        auto algorithm = EncryptionAlgorithm(baseJS);
+        auto algorithm = EncryptionAlgorithm(baseJS, logger);
         string sig = algorithm.decrypt(params["s"]);
         return params["url"].decodeComponent() ~ "&" ~ params["sp"] ~ "=" ~ sig;
     }
@@ -197,7 +201,7 @@ unittest
 {
     writeln("Should parse video formats from VEVO videos");
     string html = readText("dQ.html");
-    auto extractor = new AdvancedYoutubeVideoURLExtractor(html, "");
+    auto extractor = new AdvancedYoutubeVideoURLExtractor(html, "", new StdoutLogger());
 
     YoutubeFormat[] formats = extractor.getFormats();
     assert(formats.length == 23);
@@ -233,7 +237,7 @@ unittest
     writeln("Should parse video URL and metadata from VEVO videos");
     string html = readText("dQw4w9WgXcQ.html");
     string baseJS = readText("base.min.js");
-    auto extractor = new AdvancedYoutubeVideoURLExtractor(html, baseJS);
+    auto extractor = new AdvancedYoutubeVideoURLExtractor(html, baseJS, new StdoutLogger());
 
     assert(extractor.getID() == "dQw4w9WgXcQ");
     assert(extractor.getTitle() == "Rick Astley - Never Gonna Give You Up (Official Music Video)");
@@ -247,28 +251,28 @@ unittest
     assert(extractor.getURL(396) == "https://rr2---sn-f5o5-jhod.googlevideo.com/videoplayback?expire=1677997809&ei=keIDZIHQKMWC1ga62YWIDQ&ip=105.66.0.249&id=o-ADmt4SY6m6445pG7f4G5f72y1NE48ZiWiqWDA9pi6iQo&itag=396&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&mh=7c&mm=31%2C29&mn=sn-f5o5-jhod%2Csn-h5q7knes&ms=au%2Crdu&mv=m&mvi=2&pl=24&initcwndbps=275000&vprv=1&mime=video%2Fmp4&ns=V1YGXTHGUU0a4PsRJqmYKX0L&gir=yes&clen=5953258&dur=212.040&lmt=1674230525337110&mt=1677975897&fvip=4&keepalive=yes&fexp=24007246&c=WEB&txp=4537434&n=iRrA3X-4scFA5la&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Cvprv%2Cmime%2Cns%2Cgir%2Cclen%2Cdur%2Clmt&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=AG3C_xAwRQIgE-grPIIwKVqUa_siK-FtbLtMME0LPjp9rNlzuvLN7XQCIQCfVt03aw8T9cNgG3u_pFuQafSG4AQeKpgLEHcvodbUjA%3D%3D&sig=AOq0QJ8wRQIgadIMr0vpR2qXdJuUXwsemVtnHk62MbU6kF5SrAfOGlwCIQDYj3buw7XBrdJDtAAUL42iVe5Bfi8PRLVUK3aq-Zc2iA%3D%3D");
 }
 
-YoutubeVideoURLExtractor makeParser(string html)
+YoutubeVideoURLExtractor makeParser(string html, StdoutLogger logger)
 {
-    return makeParser(html, baseJSURL => baseJSURL.get().idup);
+    return makeParser(html, baseJSURL => baseJSURL.get().idup, logger);
 }
 
-YoutubeVideoURLExtractor makeParser(string html, string function(string) performGETRequest)
+YoutubeVideoURLExtractor makeParser(string html, string function(string) performGETRequest, StdoutLogger logger)
 {
     if(html.canFind("signatureCipher"))
     {
         string baseJSURL = html.parseBaseJSURL();
-        logMessage("Found base.js URL = ", baseJSURL);
+        logger.displayVerbose("Found base.js URL = ", baseJSURL);
         string baseJS = performGETRequest(baseJSURL);
-        return new AdvancedYoutubeVideoURLExtractor(html, baseJS);
+        return new AdvancedYoutubeVideoURLExtractor(html, baseJS, logger);
     }
-    return new SimpleYoutubeVideoURLExtractor(html);
+    return new SimpleYoutubeVideoURLExtractor(html, logger);
 }
 
 unittest
 {
     writeln("When video is VEVO song, should create advanced parser");
     string html = "dQ.html".readText();
-    auto parser = makeParser(html, url => "");
+    auto parser = makeParser(html, url => "", new StdoutLogger());
     assert(cast(AdvancedYoutubeVideoURLExtractor) parser);
     assert(!cast(SimpleYoutubeVideoURLExtractor) parser);
 }
@@ -277,7 +281,7 @@ unittest
 {
     writeln("When video regular should create simple parser");
     string html = "zoz.html".readText();
-    auto parser = makeParser(html, url => "");
+    auto parser = makeParser(html, url => "", new StdoutLogger());
     assert(cast(SimpleYoutubeVideoURLExtractor) parser);
     assert(!cast(AdvancedYoutubeVideoURLExtractor) parser);
 }
@@ -299,15 +303,17 @@ struct EncryptionAlgorithm
     alias Step = Tuple!(string, ulong);
 
     string javascript;
+    private StdoutLogger logger;
     string[string] obfuscatedStepFunctionNames;
     Step[] steps;
 
-    this(string javascript)
+    this(string javascript, StdoutLogger logger)
     {
         this.javascript = javascript;
+        this.logger = logger;
 
         string algorithm = javascript.matchOrFail!(`a\s*=\s*a\.split\(""\);\s*((.|\s)*?);\s*return a\.join\(""\)`, false);
-        logMessage("Matched algorithm = ", algorithm);
+        logger.displayVerbose("Matched algorithm = ", algorithm);
         string[] steps = algorithm.split(";");
         foreach(step; steps.map!strip)
         {
@@ -315,7 +321,7 @@ struct EncryptionAlgorithm
             ulong argument = step[step.indexOf(',') + 1 .. step.indexOf(')')].strip().to!ulong;
             this.steps ~= tuple(functionName, argument);
         }
-        logMessage("Parsed steps : ", this.steps);
+        logger.displayVerbose("Parsed steps : ", this.steps);
         parseStepFunctionNames();
     }
 
@@ -324,9 +330,9 @@ struct EncryptionAlgorithm
         char[] copy = signatureCipher.decodeComponent.dup;
         foreach(step; steps)
         {
-            logMessage(step);
-            logMessage(obfuscatedStepFunctionNames);
-            logMessage("before step = ", copy);
+            logger.displayVerbose(step);
+            logger.displayVerbose(obfuscatedStepFunctionNames);
+            logger.displayVerbose("before step = ", copy);
             switch(obfuscatedStepFunctionNames[step[0]])
             {
                 case "flip":
@@ -344,7 +350,7 @@ struct EncryptionAlgorithm
                 default:
                     assert(0);
             }
-            logMessage("after step = ", copy);
+            logger.displayVerbose("after step = ", copy);
         }
         return copy.encodeComponent.idup;
     }
@@ -352,13 +358,13 @@ struct EncryptionAlgorithm
     private void parseStepFunctionNames()
     {
         string flip = javascript.matchOrFail!(`([A-Za-z]{2}):function\(a\)\{a\.reverse\(\)\}`);
-        logMessage("Matched flip = ", flip);
+        logger.displayVerbose("Matched flip = ", flip);
 
         string removeFromStart = javascript.matchOrFail!(`([A-Za-z]{2}):function\(a,b\)\{a\.splice\(0,b\)\}`);
-        logMessage("Matched removeFromStart = ", removeFromStart);
+        logger.displayVerbose("Matched removeFromStart = ", removeFromStart);
 
         string swapFirstCharacterWith = javascript.matchOrFail!(`([A-Za-z]{2}):function\(a,b\)\{var c=a\[0\];a\[0\]=a\[b%a\.length\];a\[b%a\.length\]=c\}`);
-        logMessage("Matched swapFirstCharacterWith = ", swapFirstCharacterWith);
+        logger.displayVerbose("Matched swapFirstCharacterWith = ", swapFirstCharacterWith);
 
         obfuscatedStepFunctionNames[flip] = "flip";
         obfuscatedStepFunctionNames[swapFirstCharacterWith] = "swapFirstCharacterWith";
@@ -386,7 +392,7 @@ struct EncryptionAlgorithm
 unittest
 {
     writeln("When video is VEVO song, should correctly decrypt video signature");
-    auto algorithm = EncryptionAlgorithm("base.min.js".readText());
+    auto algorithm = EncryptionAlgorithm("base.min.js".readText(), new StdoutLogger());
     string signature = algorithm.decrypt("L%3D%3DgKKNERRt_lv67W%3DvA4fU6N2qzrARSUbfqeXlAL827irDQICgwCLRfLgHEW2t5_GLJtRC-yoiR8sy0JR-uqLLRJlLJbgIQRw8JQ0qO1");
     assert(signature == "AOq0QJ8wRQIgbJLlJRLLqu-RJ0ys8Rioy-CRtJLG_5t2WEHgLfRLCwgCIQDri728L1lXeqfbUSRArzq2N6Uf4AvLW76vl_tRRENKKg%3D%3D");
 }

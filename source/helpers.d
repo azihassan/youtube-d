@@ -1,9 +1,9 @@
-import std.logger : info;
+import std.logger;
+import std.stdio : writeln, writefln, File, stdout;
 import std.regex : ctRegex, matchFirst, escaper, regex, Captures;
 import std.algorithm : filter;
 import std.conv : to;
 import std.net.curl : HTTP;
-import std.stdio : writeln;
 import std.string : split;
 
 ulong getContentLength(string url)
@@ -12,7 +12,6 @@ ulong getContentLength(string url)
     http.method = HTTP.Method.head;
     http.addRequestHeader("User-Agent", "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:95.0) Gecko/20100101 Firefox/95.0");
     http.perform();
-    writeln(http.responseHeaders);
     return http.responseHeaders["content-length"].to!ulong;
 }
 
@@ -56,24 +55,16 @@ unittest
     assert(received == expected);
 }
 
-void logMessage(S...)(S message)
-{
-    debug
-    {
-        info(message);
-    }
-}
-
 string matchOrFail(string pattern, bool escape = false)(string source)
 {
-    logMessage("Matching ", pattern);
+    trace("Matching ", pattern);
     auto regex = ctRegex!(escape ? pattern.escaper.to!string : pattern);
     return source.matchFirst(regex).matchOrFail();
 }
 
 string matchOrFail(string source, string pattern)
 {
-    logMessage("Matching ", pattern);
+    trace("Matching ", pattern);
     auto regex = regex(pattern);
     return source.matchFirst(regex).matchOrFail();
 }
@@ -87,3 +78,68 @@ string matchOrFail(Captures!string match)
     return match[1];
 }
 
+class StdoutLogger : Logger
+{
+    private bool verbose;
+    private File stream;
+
+    this(bool verbose = false, File stream = stdout) @safe
+    {
+        super(LogLevel.info);
+        this.verbose = verbose;
+        this.stream = stream;
+    }
+
+    void displayVerbose(S...)(S message)
+    {
+        if(this.verbose)
+        {
+            log(message);
+        }
+    }
+
+    void display(S...)(S message)
+    {
+        log(message);
+    }
+
+    override void writeLogMsg(ref LogEntry payload)
+    {
+        stream.writeln(payload.msg);
+    }
+}
+
+version(unittest)
+{
+    import std.file : readText;
+    import std.string : splitLines, strip;
+}
+
+unittest
+{
+    writeln("Should log verbose output in verbose mode");
+    auto logs = File("logs.txt", "w");
+    auto logger = new StdoutLogger(true, logs);
+    logger.displayVerbose("should log this verbose message");
+    logger.display("should log this message");
+    logs.flush();
+
+    assert("logs.txt".readText().strip().splitLines() == [
+            "should log this verbose message",
+            "should log this message"
+    ]);
+}
+
+unittest
+{
+    writeln("Should skip verbose output in non verbose mode");
+    auto logs = File("logs.txt", "w");
+    auto logger = new StdoutLogger(false, logs);
+    logger.displayVerbose("should skip this verbose message");
+    logger.display("should log this message");
+    logs.flush();
+
+    assert("logs.txt".readText().splitLines() == [
+            "should log this message"
+    ]);
+}
