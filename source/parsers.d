@@ -317,7 +317,7 @@ struct EncryptionAlgorithm
         string[] steps = algorithm.split(";");
         foreach(step; steps.map!strip)
         {
-            string functionName = step[3 .. step.indexOf('(')];
+            string functionName = step[step.indexOf('.') + 1 .. step.indexOf('(')];
             ulong argument = step[step.indexOf(',') + 1 .. step.indexOf(')')].strip().to!ulong;
             this.steps ~= tuple(functionName, argument);
         }
@@ -357,13 +357,16 @@ struct EncryptionAlgorithm
 
     private void parseStepFunctionNames()
     {
-        string flip = javascript.matchOrFail!(`([A-Za-z]{2}):function\(a\)\{a\.reverse\(\)\}`);
+        logger.displayVerbose("Attempting to match ", `([A-Za-z]{2}):function\(a\)\{a\.reverse\(\)\}`);
+        string flip = javascript.matchOrFail!(`([A-Za-z0-9]{2,}):function\(a\)\{a\.reverse\(\)\}`);
         logger.displayVerbose("Matched flip = ", flip);
 
-        string removeFromStart = javascript.matchOrFail!(`([A-Za-z]{2}):function\(a,b\)\{a\.splice\(0,b\)\}`);
+        logger.displayVerbose("Attempting to match removeFromStart ", `([A-Za-z]{2}):function\(a\)\{a\.reverse\(\)\}`);
+        string removeFromStart = javascript.matchOrFail!(`([A-Za-z0-9]{2,}):function\(a,b\)\{a\.splice\(0,b\)\}`);
         logger.displayVerbose("Matched removeFromStart = ", removeFromStart);
 
-        string swapFirstCharacterWith = javascript.matchOrFail!(`([A-Za-z]{2}):function\(a,b\)\{var c=a\[0\];a\[0\]=a\[b%a\.length\];a\[b%a\.length\]=c\}`);
+        logger.displayVerbose("Attempting to match swapFirstCharacterWith ", `([A-Za-z]{2}):function\(a\)\{a\.reverse\(\)\}`);
+        string swapFirstCharacterWith = javascript.matchOrFail!(`([A-Za-z0-9]{2,}):function\(a,b\)\{var c=a\[0\];a\[0\]=a\[b%a\.length\];a\[b%a\.length\]=c\}`);
         logger.displayVerbose("Matched swapFirstCharacterWith = ", swapFirstCharacterWith);
 
         obfuscatedStepFunctionNames[flip] = "flip";
