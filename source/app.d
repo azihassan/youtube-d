@@ -44,62 +44,92 @@ void main(string[] args)
 
     foreach(url; urls)
     {
-        logger.display("Handling ", url);
-        string html = url.get().idup;
-        logger.displayVerbose("Downloaded video HTML");
-        YoutubeVideoURLExtractor parser = makeParser(html, logger);
-        if(displayFormats)
+        try
         {
-            logger.display("Available formats for ", url);
-            parser.getFormats().each!(format => logger.display(format));
-            logger.display();
+            handleURL(
+                url,
+                itag,
+                logger,
+                displayFormats,
+                outputURL,
+                parallel
+            );
+        }
+        catch(Exception e)
+        {
+            logger.error(formatError(e.message.idup));
+            logger.displayVerbose(e.info);
             continue;
         }
-
-        logger.display(parser.getID());
-        logger.display(parser.getTitle());
-        string filename = format!"%s-%s.mp4"(parser.getTitle(), parser.getID()).sanitizePath();
-        logger.displayVerbose(filename);
-        string destination = buildPath(getcwd(), filename);
-        logger.displayVerbose(destination);
-        string link = parser.getURL(itag);
-
-        logger.displayVerbose(parser.getID() ~ ".html");
-        logger.displayVerbose("Found link : ", link);
-
-        if(link == "")
+        finally
         {
-            logger.error("Failed to parse video URL");
-            continue;
+            logger.display("");
+            logger.display("");
         }
-        if(outputURL)
-        {
-            logger.display(link);
-            continue;
-        }
-
-        logger.display("Downloading ", url, " to ", filename);
-
-        Downloader downloader;
-        if(parallel)
-        {
-            logger.display("Using ParallelDownloader");
-            downloader = new ParallelDownloader(logger, parser.getID(), parser.getTitle());
-        }
-        else
-        {
-            logger.display("Using RegularDownloader");
-            downloader = new RegularDownloader(logger, (size_t total, size_t current) {
-                if(current == 0 || total == 0)
-                {
-                    return 0;
-                }
-                auto percentage = 100.0 * (cast(float)(current) / total);
-                writef!"\r[%.2f %%] %.2f / %.2f MB"(percentage, current / 1024.0 / 1024.0, total / 1024.0 / 1024.0);
-                return 0;
-            });
-        }
-        downloader.download(destination, link, url);
     }
 }
 
+void handleURL(string url, int itag, StdoutLogger logger, bool displayFormats, bool outputURL, bool parallel)
+{
+    logger.display(formatTitle("Handling " ~ url));
+    string html = url.get().idup;
+    logger.displayVerbose("Downloaded video HTML");
+    YoutubeVideoURLExtractor parser = makeParser(html, logger);
+
+    if(displayFormats)
+    {
+        logger.display("Available formats for ", url);
+        parser.getFormats().each!(format => logger.display(format));
+        logger.display();
+        return;
+    }
+
+    logger.display(parser.getID());
+    logger.display(parser.getTitle());
+    string filename = format!"%s-%s.mp4"(parser.getTitle(), parser.getID()).sanitizePath();
+    logger.displayVerbose(filename);
+    string destination = buildPath(getcwd(), filename);
+    logger.displayVerbose(destination);
+    string link = parser.getURL(itag);
+
+    logger.displayVerbose(parser.getID() ~ ".html");
+    logger.displayVerbose("Found link : ", link);
+
+    if(link == "")
+    {
+        throw new Exception("Failed to parse video URL");
+    }
+
+    if(outputURL)
+    {
+        logger.display(link);
+        return;
+    }
+
+    logger.display("Downloading ", url, " to ", filename);
+
+    Downloader downloader;
+    if(parallel)
+    {
+        logger.display("Using ParallelDownloader");
+        downloader = new ParallelDownloader(logger, parser.getID(), parser.getTitle());
+    }
+    else
+    {
+        logger.display("Using RegularDownloader");
+        downloader = new RegularDownloader(logger, (size_t total, size_t current) {
+            if(current == 0 || total == 0)
+            {
+                return 0;
+            }
+            if(current >= total)
+            {
+                logger.display("Done !".formatSuccess());
+            }
+            auto percentage = 100.0 * (cast(float)(current) / total);
+            writef!"\r[%.2f %%] %.2f / %.2f MB"(percentage, current / 1024.0 / 1024.0, total / 1024.0 / 1024.0);
+            return 0;
+        });
+    }
+    downloader.download(destination, link, url);
+}

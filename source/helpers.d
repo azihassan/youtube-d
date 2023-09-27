@@ -143,3 +143,18 @@ unittest
             "should log this message"
     ]);
 }
+
+string formatSuccess(string input)
+{
+    return "\033[0;32m" ~ input ~ "\033[0m";
+}
+
+string formatError(string input)
+{
+    return "\033[1;31m" ~ input ~ "\033[0m";
+}
+
+string formatTitle(string input)
+{
+    return "\033[1m" ~ input ~ "\033[0m";
+}

@@ -6,7 +6,7 @@ import std.string : startsWith, indexOf, format, split;
 import std.file : append, exists, read, remove, getSize;
 import std.range : iota;
 import std.net.curl : Curl, CurlOption;
-import helpers : getContentLength, sanitizePath, StdoutLogger;
+import helpers : getContentLength, sanitizePath, StdoutLogger, formatSuccess;
 
 interface Downloader
 {
@@ -100,6 +100,7 @@ class ParallelDownloader : Downloader
         {
             logger.display("Concatenating partial files...");
             concatenateFiles(destinations, destination);
+            logger.display("Done !".formatSuccess());
         }
     }
 
