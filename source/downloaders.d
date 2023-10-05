@@ -70,6 +70,12 @@ class ParallelDownloader : Downloader
     {
         ulong length = url.getContentLength();
         logger.displayVerbose("Length = ", length);
+        if(destination.exists() && destination.getSize() == length)
+        {
+            logger.display("Done !".formatSuccess());
+            return;
+        }
+
         int chunks = 4;
         string[] destinations = new string[chunks];
         foreach(i, e; iota(0, chunks).parallel)
