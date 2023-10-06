@@ -1,5 +1,4 @@
 import std.json;
-import std.algorithm : canFind;
 import std.net.curl : get;
 import std.uri : decodeComponent, encodeComponent;
 import std.stdio;
@@ -8,7 +7,8 @@ import std.conv : to;
 import std.array : replace;
 import std.file : readText;
 import std.string : indexOf, format, lastIndexOf, split, strip;
-import std.algorithm : reverse, map;
+import std.algorithm : canFind, filter, reverse, map;
+//import std.range : filter;
 
 import helpers : parseQueryString, matchOrFail, StdoutLogger;
 
@@ -35,6 +35,17 @@ abstract class YoutubeVideoURLExtractor
             meta = parser.querySelector("meta[itemprop=identifier]");
         }
         return meta.attr("content").idup;
+    }
+
+    public YoutubeFormat getFormat(int itag)
+    {
+        YoutubeFormat[] formats = getFormats("formats") ~ getFormats("adaptiveFormats");
+        auto match = formats.filter!(format => format.itag == itag);
+        if(match.empty)
+        {
+            throw new Exception("Unknown itag : " ~ itag.to!string);
+        }
+        return match.front();
     }
 
     public YoutubeFormat[] getFormats()
@@ -111,6 +122,17 @@ struct YoutubeFormat
     string quality;
     string mimetype;
 
+    string extension() @property nothrow
+    {
+        auto slashIndex = mimetype.indexOf("/");
+        auto semicolonIndex = mimetype.indexOf(";");
+        if(slashIndex == -1 || semicolonIndex == -1 || slashIndex >= semicolonIndex)
+        {
+            return "mp4";
+        }
+        return mimetype[slashIndex + 1 .. semicolonIndex];
+    }
+
     string toString()
     {
         return format!`[%d] (%s) %s MB %s`(
@@ -149,6 +171,10 @@ unittest
     assert(formats[15] == YoutubeFormat(249, 3314860, "tiny", `audio/webm; codecs="opus"`));
     assert(formats[16] == YoutubeFormat(250, 4347447, "tiny", `audio/webm; codecs="opus"`));
     assert(formats[17] == YoutubeFormat(251, 8650557, "tiny", `audio/webm; codecs="opus"`));
+
+    assert(YoutubeFormat(278, 6583212, "144p", `video/webm; codecs="vp9"`).extension == "webm");
+    assert(YoutubeFormat(140, 9371359, "tiny", `audio/mp4; codecs="mp4a.40.2"`).extension == "mp4");
+    assert(YoutubeFormat(140, 9371359, "unknown", `foobar`).extension == "mp4");
 }
 
 class AdvancedYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
