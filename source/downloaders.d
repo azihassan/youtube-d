@@ -8,6 +8,8 @@ import std.range : iota;
 import std.net.curl : Curl, CurlOption;
 import helpers : getContentLength, sanitizePath, StdoutLogger, formatSuccess;
 
+import parsers : YoutubeFormat;
+
 interface Downloader
 {
     void download(string destination, string url, string referer);
@@ -58,12 +60,14 @@ class ParallelDownloader : Downloader
     private StdoutLogger logger;
     private string id;
     private string title;
+    private YoutubeFormat youtubeFormat;
 
-    this(StdoutLogger logger, string id, string title)
+    this(StdoutLogger logger, string id, string title, YoutubeFormat youtubeFormat)
     {
         this.id = id;
         this.title = title;
         this.logger = logger;
+        this.youtubeFormat = youtubeFormat;
     }
 
     public void download(string destination, string url, string referer)
@@ -82,8 +86,8 @@ class ParallelDownloader : Downloader
         {
             ulong[] offsets = calculateOffset(length, chunks, i);
             string partialLink = format!"%s&range=%d-%d"(url, offsets[0], offsets[1]);
-            string partialDestination = format!"%s-%s-%d-%d.mp4.part.%d"(
-                title, id, offsets[0], offsets[1], i
+            string partialDestination = format!"%s-%s-%d-%d-%d.%s.part.%d"(
+                title, id, youtubeFormat.itag, offsets[0], offsets[1], youtubeFormat.extension, i
             ).sanitizePath();
             destinations[i] = partialDestination;
 
@@ -133,7 +137,7 @@ class ParallelDownloader : Downloader
 
     unittest
     {
-        auto downloader = new ParallelDownloader(new StdoutLogger(), "", "");
+        auto downloader = new ParallelDownloader(new StdoutLogger(), "", "", YoutubeFormat(18, 9371359, "360p", "video/mp4"));
         ulong length = 20 * 1024 * 1024;
         assert([0, 5 * 1024 * 1024] == downloader.calculateOffset(length, 4, 0));
         assert([5 * 1024 * 1024 + 1, 10 * 1024 * 1024] == downloader.calculateOffset(length, 4, 1));
@@ -143,7 +147,7 @@ class ParallelDownloader : Downloader
 
     unittest
     {
-        auto downloader = new ParallelDownloader(new StdoutLogger(), "", "");
+        auto downloader = new ParallelDownloader(new StdoutLogger(), "", "", YoutubeFormat(18, 9371359, "360p", "video/mp4"));
         ulong length = 23;
         assert([0, 5] == downloader.calculateOffset(length, 4, 0));
         assert([5 + 1, 10] == downloader.calculateOffset(length, 4, 1));

@@ -86,7 +86,8 @@ void handleURL(string url, int itag, StdoutLogger logger, bool displayFormats, b
 
     logger.display(parser.getID());
     logger.display(parser.getTitle());
-    string filename = format!"%s-%s.mp4"(parser.getTitle(), parser.getID()).sanitizePath();
+    YoutubeFormat youtubeFormat = parser.getFormat(itag);
+    string filename = format!"%s-%s-%d.%s"(parser.getTitle(), parser.getID(), itag, youtubeFormat.extension).sanitizePath();
     logger.displayVerbose(filename);
     string destination = buildPath(getcwd(), filename);
     logger.displayVerbose(destination);
@@ -112,7 +113,7 @@ void handleURL(string url, int itag, StdoutLogger logger, bool displayFormats, b
     if(parallel)
     {
         logger.display("Using ParallelDownloader");
-        downloader = new ParallelDownloader(logger, parser.getID(), parser.getTitle());
+        downloader = new ParallelDownloader(logger, parser.getID(), parser.getTitle(), youtubeFormat);
     }
     else
     {
