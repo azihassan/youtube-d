@@ -18,3 +18,7 @@ jobs:
     - name: Unit tests
       run: dub test --coverage
 
+    - name: e2e tests
+      run: sh tests.sh
+
+
