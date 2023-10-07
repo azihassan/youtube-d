@@ -19,11 +19,13 @@ class RegularDownloader : Downloader
 {
     private StdoutLogger logger;
     private int delegate(ulong length, ulong currentLength) onProgress;
+    private bool progress;
 
-    this(StdoutLogger logger, int delegate(ulong length, ulong currentLength) onProgress)
+    this(StdoutLogger logger, int delegate(ulong length, ulong currentLength) onProgress, bool progress = true)
     {
         this.logger = logger;
         this.onProgress = onProgress;
+        this.progress = progress;
     }
 
     public void download(string destination, string url, string referer)
@@ -48,9 +50,12 @@ class RegularDownloader : Downloader
             return data.length;
         };
 
-        http.onProgress = (size_t total, size_t current, size_t _, size_t __) {
-            return onProgress(total, current);
-        };
+        if(progress)
+        {
+            http.onProgress = (size_t total, size_t current, size_t _, size_t __) {
+                return onProgress(total, current);
+            };
+        }
         auto result = http.perform();
     }
 }
@@ -61,13 +66,15 @@ class ParallelDownloader : Downloader
     private string id;
     private string title;
     private YoutubeFormat youtubeFormat;
+    private bool progress;
 
-    this(StdoutLogger logger, string id, string title, YoutubeFormat youtubeFormat)
+    this(StdoutLogger logger, string id, string title, YoutubeFormat youtubeFormat, bool progress = true)
     {
         this.id = id;
         this.title = title;
         this.logger = logger;
         this.youtubeFormat = youtubeFormat;
+        this.progress = progress;
     }
 
     public void download(string destination, string url, string referer)
@@ -100,7 +107,7 @@ class ParallelDownloader : Downloader
                 auto percentage = 100.0 * (cast(float)(current) / length);
                 writef!"\r[%.2f %%] %.2f / %.2f MB"(percentage, current / 1024.0 / 1024.0, length / 1024.0 / 1024.0);
                 return 0;
-            }).download(partialDestination, partialLink, url);
+            }, progress).download(partialDestination, partialLink, url);
         }
 
         writeln();

@@ -20,6 +20,7 @@ void main(string[] args)
     bool parallel;
     bool outputURL;
     bool verbose;
+    bool noProgress;
 
     auto help = args.getopt(
         std.getopt.config.passThrough,
@@ -28,7 +29,8 @@ void main(string[] args)
         "F", "List available formats", &displayFormats,
         "o|output-url", "Display extracted video URL without downloading it", &outputURL,
         "p|parallel", "Download in 4 parallel connections", &parallel,
-        "v|verbose", "Display debugging messages", &verbose
+        "v|verbose", "Display debugging messages", &verbose,
+        "no-progress", "Don't display real-time progress", &noProgress
     );
 
     if(help.helpWanted || args.length == 1)
@@ -52,7 +54,8 @@ void main(string[] args)
                 logger,
                 displayFormats,
                 outputURL,
-                parallel
+                parallel,
+                noProgress
             );
         }
         catch(Exception e)
@@ -69,7 +72,7 @@ void main(string[] args)
     }
 }
 
-void handleURL(string url, int itag, StdoutLogger logger, bool displayFormats, bool outputURL, bool parallel)
+void handleURL(string url, int itag, StdoutLogger logger, bool displayFormats, bool outputURL, bool parallel, bool noProgress)
 {
     logger.display(formatTitle("Handling " ~ url));
     string html = url.get().idup;
@@ -113,7 +116,7 @@ void handleURL(string url, int itag, StdoutLogger logger, bool displayFormats, b
     if(parallel)
     {
         logger.display("Using ParallelDownloader");
-        downloader = new ParallelDownloader(logger, parser.getID(), parser.getTitle(), youtubeFormat);
+        downloader = new ParallelDownloader(logger, parser.getID(), parser.getTitle(), youtubeFormat, !noProgress);
     }
     else
     {
@@ -130,7 +133,7 @@ void handleURL(string url, int itag, StdoutLogger logger, bool displayFormats, b
             auto percentage = 100.0 * (cast(float)(current) / total);
             writef!"\r[%.2f %%] %.2f / %.2f MB"(percentage, current / 1024.0 / 1024.0, total / 1024.0 / 1024.0);
             return 0;
-        });
+        }, !noProgress);
     }
     downloader.download(destination, link, url);
 }
