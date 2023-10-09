@@ -20,6 +20,7 @@ abstract class YoutubeVideoURLExtractor
     protected Document parser;
 
     abstract public string getURL(int itag = 18);
+    abstract public ulong findExpirationTimestamp(int itag);
 
     public string getTitle()
     {
@@ -88,6 +89,13 @@ class SimpleYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
         return html
             .matchOrFail(`"itag":` ~ itag.to!string ~ `,"url":"(.*?)"`)
             .replace(`\u0026`, "&");
+    }
+
+    override ulong findExpirationTimestamp(int itag)
+    {
+        string videoURL = getURL(itag);
+        string[string] params = videoURL.parseQueryString();
+        return params["expire"].to!ulong;
     }
 }
 
@@ -199,7 +207,14 @@ class AdvancedYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
         return params["url"].decodeComponent() ~ "&" ~ params["sp"] ~ "=" ~ sig;
     }
 
-    private string findSignatureCipher(int itag)
+    override ulong findExpirationTimestamp(int itag)
+    {
+        string signatureCipher = findSignatureCipher(itag);
+        string[string] params = signatureCipher.parseQueryString()["url"].decodeComponent().parseQueryString();
+        return params["expire"].to!int;
+    }
+
+    string findSignatureCipher(int itag)
     {
         string encoded = "itag%3D" ~ itag.to!string;
         long index = html.indexOf(encoded);
@@ -282,7 +297,7 @@ YoutubeVideoURLExtractor makeParser(string html, StdoutLogger logger)
     return makeParser(html, baseJSURL => baseJSURL.get().idup, logger);
 }
 
-YoutubeVideoURLExtractor makeParser(string html, string function(string) performGETRequest, StdoutLogger logger)
+YoutubeVideoURLExtractor makeParser(string html, string delegate(string) performGETRequest, StdoutLogger logger)
 {
     if(html.canFind("signatureCipher"))
     {
