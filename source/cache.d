@@ -9,7 +9,7 @@ import std.path : buildPath;
 import std.string : indexOf;
 
 import helpers : StdoutLogger, parseID, parseQueryString;
-import parsers : makeParser, YoutubeVideoURLExtractor;
+import parsers : parseBaseJSURL, YoutubeVideoURLExtractor, SimpleYoutubeVideoURLExtractor, AdvancedYoutubeVideoURLExtractor;
 
 struct Cache
 {
@@ -30,7 +30,56 @@ struct Cache
         this.downloadAsString = downloadAsString;
     }
 
-    string getHTML(string url, int itag)
+    YoutubeVideoURLExtractor makeParser(string url, int itag, StdoutLogger logger)
+    {
+        string html = getHTML(url, itag);
+        if(html.indexOf("signatureCipher") == -1)
+        {
+            return new SimpleYoutubeVideoURLExtractor(html, logger);
+        }
+        string baseJS = getBaseJS(url, itag);
+        return new AdvancedYoutubeVideoURLExtractor(html, baseJS, logger);
+    }
+
+    private string getHTML(string url, int itag)
+    {
+        string htmlCachePath = getCachePath(url) ~ ".html";
+        string baseJSCachePath = getCachePath(url) ~ ".js";
+        updateCache(url, htmlCachePath, baseJSCachePath, itag);
+        return htmlCachePath.readText();
+    }
+
+    private string getBaseJS(string url, int itag)
+    {
+        string htmlCachePath = getCachePath(url) ~ ".html";
+        string baseJSCachePath = getCachePath(url) ~ ".js";
+        updateCache(url, htmlCachePath, baseJSCachePath, itag);
+        return baseJSCachePath.readText();
+    }
+
+    private void updateCache(string url, string htmlCachePath, string baseJSCachePath, int itag)
+    {
+        string cachedHTML = htmlCachePath.readText();
+        bool shouldRedownload = !htmlCachePath.exists() || isStale(cachedHTML, itag);
+        if(shouldRedownload)
+        {
+            string html = this.downloadAsString(url);
+            htmlCachePath.write(html);
+            string baseJS = this.downloadAsString(html.parseBaseJSURL());
+            baseJSCachePath.write(baseJS);
+        }
+    }
+
+    private bool isStale(string html, int itag)
+    {
+        YoutubeVideoURLExtractor shallowParser = html.indexOf("signatureCipher") == -1
+            ? new SimpleYoutubeVideoURLExtractor(html, logger)
+            : new AdvancedYoutubeVideoURLExtractor(html, "", logger);
+        ulong expire = shallowParser.findExpirationTimestamp(itag);
+        return SysTime.fromUnixTime(expire) < Clock.currTime();
+    }
+
+    private string getCachePath(string url)
     {
         string cacheKey = url.parseID();
         if(cacheKey == "")
@@ -38,43 +87,8 @@ struct Cache
             cacheKey = Base64URL.encode(cast(ubyte[]) url);
         }
 
-        string cachePath = buildPath(cacheDirectory, cacheKey) ~ ".html";
-        updateCache(url, cachePath, itag);
-        return cachePath.readText();
+        return buildPath(cacheDirectory, cacheKey);
     }
-
-    private void updateCache(string url, string cachePath, int itag)
-    {
-        string cachedHTML = cachePath.readText();
-        bool shouldRedownload = !cachePath.exists() || isStale(cachedHTML, itag);
-        if(shouldRedownload)
-        {
-            string html = this.downloadAsString(url);
-            cachePath.write(html);
-        }
-    }
-
-    private bool isStale(string html, int itag)
-    {
-        YoutubeVideoURLExtractor parser = makeParser(html, url => "", logger);
-        ulong expire = parser.findExpirationTimestamp(itag);
-        return SysTime.fromUnixTime(expire) < Clock.currTime();
-    }
-}
-
-unittest
-{
-    writeln("Given AdvancedYoutubeVideoURLExtractor, when cache is stale, should redownload HTML");
-    bool downloadAttempted;
-    auto downloadAsString = delegate string(string url) {
-        downloadAttempted = true;
-        return "dQw4w9WgXcQ.html".readText();
-    };
-    auto cache = Cache(new StdoutLogger(), downloadAsString);
-    cache.cacheDirectory = getcwd();
-
-    string html = cache.getHTML("https://youtu.be/dQw4w9WgXcQ", 18);
-    assert(downloadAttempted);
 }
 
 unittest
@@ -88,7 +102,7 @@ unittest
     auto cache = Cache(new StdoutLogger(), downloadAsString);
     cache.cacheDirectory = getcwd();
 
-    string html = cache.getHTML("https://youtu.be/zoz", 18);
+    auto parser = cache.makeParser("https://youtu.be/zoz", 18, new StdoutLogger());
     assert(downloadAttempted);
 }
 
@@ -103,10 +117,26 @@ unittest
     SysTime tomorrow = Clock.currTime() + 1.days;
     auto cache = Cache(new StdoutLogger(), downloadAsString);
     cache.cacheDirectory = getcwd();
+
     "zoz-fresh.html".write("zoz.html".readText().dup.replace("expire=1638935038", "expire=" ~ tomorrow.toUnixTime().to!string));
 
-    string html = cache.getHTML("https://youtu.be/zoz-fresh", 18);
+    auto parser = cache.makeParser("https://youtu.be/zoz-fresh", 18, new StdoutLogger());
     assert(!downloadAttempted);
+}
+
+unittest
+{
+    writeln("Given AdvancedYoutubeVideoURLExtractor, when cache is stale, should redownload HTML");
+    bool downloadAttempted;
+    auto downloadAsString = delegate string(string url) {
+        downloadAttempted = true;
+        return "dQw4w9WgXcQ.html".readText();
+    };
+    auto cache = Cache(new StdoutLogger(), downloadAsString);
+    cache.cacheDirectory = getcwd();
+
+    auto parser = cache.makeParser("https://youtu.be/dQw4w9WgXcQ", 18, new StdoutLogger());
+    assert(downloadAttempted);
 }
 
 unittest
@@ -115,15 +145,19 @@ unittest
     bool downloadAttempted;
     auto downloadAsString = delegate string(string url) {
         downloadAttempted = true;
-        return "zoz.html".readText();
+        return "dQw4w9WgXcQ-fresh.html".readText();
     };
     SysTime tomorrow = Clock.currTime() + 1.days;
     auto cache = Cache(new StdoutLogger(), downloadAsString);
     cache.cacheDirectory = getcwd();
+
+    //mock previously cached and fresh files
+    "dQw4w9WgXcQ-fresh.js".write("base.min.js".readText());
     "dQw4w9WgXcQ-fresh.html".write(
             "dQw4w9WgXcQ.html".readText().dup.replace("expire%3D1677997809", "expire%3D" ~ tomorrow.toUnixTime().to!string)
     );
 
-    string html = cache.getHTML("https://youtu.be/dQw4w9WgXcQ-fresh", 18);
+
+    auto parser = cache.makeParser("https://youtu.be/dQw4w9WgXcQ-fresh", 18, new StdoutLogger());
     assert(!downloadAttempted);
 }
