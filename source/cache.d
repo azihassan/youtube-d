@@ -30,7 +30,7 @@ struct Cache
         this.downloadAsString = downloadAsString;
     }
 
-    YoutubeVideoURLExtractor makeParser(string url, int itag, StdoutLogger logger)
+    YoutubeVideoURLExtractor makeParser(string url, int itag)
     {
         string html = getHTML(url, itag);
         if(html.indexOf("signatureCipher") == -1)
@@ -59,14 +59,18 @@ struct Cache
 
     private void updateCache(string url, string htmlCachePath, string baseJSCachePath, int itag)
     {
-        string cachedHTML = htmlCachePath.readText();
-        bool shouldRedownload = !htmlCachePath.exists() || isStale(cachedHTML, itag);
+        bool shouldRedownload = !htmlCachePath.exists() || isStale(htmlCachePath.readText(), itag);
         if(shouldRedownload)
         {
+            logger.display("Cache miss, downloading HTML...");
             string html = this.downloadAsString(url);
             htmlCachePath.write(html);
             string baseJS = this.downloadAsString(html.parseBaseJSURL());
             baseJSCachePath.write(baseJS);
+        }
+        else
+        {
+            logger.display("Cache hit, skipping HTML download...");
         }
     }
 
@@ -102,7 +106,7 @@ unittest
     auto cache = Cache(new StdoutLogger(), downloadAsString);
     cache.cacheDirectory = getcwd();
 
-    auto parser = cache.makeParser("https://youtu.be/zoz", 18, new StdoutLogger());
+    auto parser = cache.makeParser("https://youtu.be/zoz", 18);
     assert(downloadAttempted);
 }
 
@@ -120,7 +124,7 @@ unittest
 
     "zoz-fresh.html".write("zoz.html".readText().dup.replace("expire=1638935038", "expire=" ~ tomorrow.toUnixTime().to!string));
 
-    auto parser = cache.makeParser("https://youtu.be/zoz-fresh", 18, new StdoutLogger());
+    auto parser = cache.makeParser("https://youtu.be/zoz-fresh", 18);
     assert(!downloadAttempted);
 }
 
@@ -135,7 +139,7 @@ unittest
     auto cache = Cache(new StdoutLogger(), downloadAsString);
     cache.cacheDirectory = getcwd();
 
-    auto parser = cache.makeParser("https://youtu.be/dQw4w9WgXcQ", 18, new StdoutLogger());
+    auto parser = cache.makeParser("https://youtu.be/dQw4w9WgXcQ", 18);
     assert(downloadAttempted);
 }
 
@@ -158,6 +162,6 @@ unittest
     );
 
 
-    auto parser = cache.makeParser("https://youtu.be/dQw4w9WgXcQ-fresh", 18, new StdoutLogger());
+    auto parser = cache.makeParser("https://youtu.be/dQw4w9WgXcQ-fresh", 18);
     assert(!downloadAttempted);
 }
