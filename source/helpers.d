@@ -4,7 +4,8 @@ import std.regex : ctRegex, matchFirst, escaper, regex, Captures;
 import std.algorithm : filter;
 import std.conv : to;
 import std.net.curl : HTTP;
-import std.string : split;
+import std.string : split, indexOf, startsWith;
+import std.format : formattedRead;
 
 ulong getContentLength(string url)
 {
@@ -33,6 +34,11 @@ string sanitizePath(string path)
 
 string[string] parseQueryString(string input)
 {
+    auto questionMarkIndex = input.indexOf("?");
+    if(questionMarkIndex != -1)
+    {
+        input = input[questionMarkIndex + 1 .. $];
+    }
     string[string] result;
     foreach(params; input.split("&"))
     {
@@ -157,4 +163,35 @@ string formatError(string input)
 string formatTitle(string input)
 {
     return "\033[1m" ~ input ~ "\033[0m";
+}
+
+string parseID(string url)
+{
+    string id;
+    if(!url.startsWith("https://"))
+    {
+        url = "https://" ~ url;
+    }
+
+    if(url.indexOf("?v=") != -1)
+    {
+        return url[url.indexOf("?") + 1 .. $].parseQueryString()["v"];
+    }
+    if(url.indexOf("youtu.be") != -1)
+    {
+        url.formattedRead!"https://youtu.be/%s"(id);
+    }
+    if(url.indexOf("shorts") != -1)
+    {
+        url.formattedRead!"https://www.youtube.com/shorts/%s"(id);
+    }
+    return id;
+}
+
+unittest
+{
+    assert("https://www.youtube.com/watch?v=-H-Fno9xbE4".parseID() == "-H-Fno9xbE4");
+    assert("https://youtu.be/-H-Fno9xbE4".parseID() == "-H-Fno9xbE4");
+    assert("https://www.youtube.com/shorts/_tT2ldpZHek".parseID() == "_tT2ldpZHek");
+    assert("qlsdkqsldkj".parseID() == "");
 }

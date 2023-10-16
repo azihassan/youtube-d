@@ -9,9 +9,10 @@ import std.range : iota;
 import std.logger;
 import std.getopt;
 
-import parsers;
 import downloaders;
 import helpers;
+import parsers : YoutubeFormat, YoutubeVideoURLExtractor;
+import cache : Cache;
 
 void main(string[] args)
 {
@@ -74,10 +75,10 @@ void main(string[] args)
 
 void handleURL(string url, int itag, StdoutLogger logger, bool displayFormats, bool outputURL, bool parallel, bool noProgress)
 {
+    auto cache = Cache(logger);
     logger.display(formatTitle("Handling " ~ url));
-    string html = url.get().idup;
     logger.displayVerbose("Downloaded video HTML");
-    YoutubeVideoURLExtractor parser = makeParser(html, logger);
+    YoutubeVideoURLExtractor parser = cache.makeParser(url, itag);
 
     if(displayFormats)
     {
