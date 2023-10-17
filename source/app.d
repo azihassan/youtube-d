@@ -11,7 +11,7 @@ import std.getopt;
 
 import downloaders;
 import helpers;
-import parsers : YoutubeFormat, YoutubeVideoURLExtractor;
+import parsers : makeParser, YoutubeFormat, YoutubeVideoURLExtractor;
 import cache : Cache;
 
 void main(string[] args)
@@ -22,6 +22,7 @@ void main(string[] args)
     bool outputURL;
     bool verbose;
     bool noProgress;
+    bool noCache;
 
     auto help = args.getopt(
         std.getopt.config.passThrough,
@@ -31,7 +32,8 @@ void main(string[] args)
         "o|output-url", "Display extracted video URL without downloading it", &outputURL,
         "p|parallel", "Download in 4 parallel connections", &parallel,
         "v|verbose", "Display debugging messages", &verbose,
-        "no-progress", "Don't display real-time progress", &noProgress
+        "no-progress", "Don't display real-time progress", &noProgress,
+        "no-cache", "Skip caching of HTML and base.js", &noCache
     );
 
     if(help.helpWanted || args.length == 1)
@@ -56,7 +58,8 @@ void main(string[] args)
                 displayFormats,
                 outputURL,
                 parallel,
-                noProgress
+                noProgress,
+                noCache
             );
         }
         catch(Exception e)
@@ -73,12 +76,11 @@ void main(string[] args)
     }
 }
 
-void handleURL(string url, int itag, StdoutLogger logger, bool displayFormats, bool outputURL, bool parallel, bool noProgress)
+void handleURL(string url, int itag, StdoutLogger logger, bool displayFormats, bool outputURL, bool parallel, bool noProgress, bool noCache)
 {
-    auto cache = Cache(logger);
     logger.display(formatTitle("Handling " ~ url));
+    YoutubeVideoURLExtractor parser = noCache ? makeParser(url.get().idup, logger) : Cache(logger).makeParser(url, itag);
     logger.displayVerbose("Downloaded video HTML");
-    YoutubeVideoURLExtractor parser = cache.makeParser(url, itag);
 
     if(displayFormats)
     {
