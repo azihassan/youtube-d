@@ -44,6 +44,11 @@ class RegularDownloader : Downloader
         http.set(CurlOption.useragent, "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:95.0) Gecko/20100101 Firefox/95.0");
         http.set(CurlOption.referer, referer);
         http.set(CurlOption.followlocation, true);
+        http.set(CurlOption.failonerror, true);
+
+        http.onReceiveHeader = (in char[]  header) {
+            logger.displayVerbose(header);
+        };
 
         http.onReceive = (ubyte[] data) {
             file.rawWrite(data);
@@ -98,6 +103,11 @@ class ParallelDownloader : Downloader
             ).sanitizePath();
             destinations[i] = partialDestination;
 
+            if(partialDestination.exists() && partialDestination.getSize() >= offsets[1] - offsets[0])
+            {
+                logger.displayVerbose(partialDestination, " already has ", partialDestination.getSize(), " bytes, skipping");
+                continue;
+            }
             new RegularDownloader(logger, (ulong _, ulong __) {
                 if(length == 0)
                 {

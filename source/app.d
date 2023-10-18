@@ -8,6 +8,7 @@ import std.path : buildPath;
 import std.range : iota;
 import std.logger;
 import std.getopt;
+import std.typecons : Yes, No;
 
 import downloaders;
 import helpers;
@@ -46,32 +47,38 @@ void main(string[] args)
 
     auto logger = new StdoutLogger(verbose);
     string[] urls = args[1 .. $];
+    int retries = 2;
 
     foreach(url; urls)
     {
-        try
+        foreach(retry; 0 .. retries)
         {
-            handleURL(
-                url,
-                itag,
-                logger,
-                displayFormats,
-                outputURL,
-                parallel,
-                noProgress,
-                noCache
-            );
-        }
-        catch(Exception e)
-        {
-            logger.error(formatError(e.message.idup));
-            logger.displayVerbose(e.info);
-            continue;
-        }
-        finally
-        {
-            logger.display("");
-            logger.display("");
+            try
+            {
+                handleURL(
+                    url,
+                    itag,
+                    logger,
+                    displayFormats,
+                    outputURL,
+                    parallel,
+                    noProgress,
+                    retry > 0 ? true : noCache //force cache refresh on failure
+                );
+                break;
+            }
+            catch(Exception e)
+            {
+                logger.error(formatError(e.message.idup));
+                logger.displayVerbose(e.info);
+                logger.error("Retry ", retry + 1, " of ", retries);
+                continue;
+            }
+            finally
+            {
+                logger.display("");
+                logger.display("");
+            }
         }
     }
 }
@@ -79,7 +86,7 @@ void main(string[] args)
 void handleURL(string url, int itag, StdoutLogger logger, bool displayFormats, bool outputURL, bool parallel, bool noProgress, bool noCache)
 {
     logger.display(formatTitle("Handling " ~ url));
-    YoutubeVideoURLExtractor parser = noCache ? makeParser(url.get().idup, logger) : Cache(logger).makeParser(url, itag);
+    YoutubeVideoURLExtractor parser = Cache(logger, noCache ? Yes.forceRefresh : No.forceRefresh).makeParser(url, itag);
     logger.displayVerbose("Downloaded video HTML");
 
     if(displayFormats)

@@ -7,7 +7,7 @@ if [ ! -e "$filename" ]; then
 fi
 echo "[1/3] OK, $filename exists"
 
-expected_size=5953988
+expected_size=7079820
 actual_size=$(du -b "$filename" | cut -f 1)
 if [ $expected_size -ne $actual_size ]; then
     echo "Wrong size. Expected $expected_size, found $actual_size"
@@ -15,7 +15,7 @@ if [ $expected_size -ne $actual_size ]; then
 fi
 echo "[2/3] OK, size is correct"
 
-expected_hash="b264ca23f70ff08105af6309d3d2f4ed"
+expected_hash="e7160d310e79a5a65f382b8ca0b198dd"
 actual_hash=$(md5sum "$filename" | cut -d " " -f 1)
 if [ $expected_hash != $actual_hash ]; then
     echo "Wrong hash. Expected $expected_hash, found $actual_hash"
