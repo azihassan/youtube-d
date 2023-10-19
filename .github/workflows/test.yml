@@ -4,8 +4,17 @@ on: [push]
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        e2e: [sh tests.sh, powershell.exe -file tests.ps1]
+        exclude:
+          - os: ubuntu-latest
+            e2e:  powershell.exe -file tests.ps1
+          - os: ubuntu-latest
+            e2e: sh tests.sh
 
+    runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v1
 
@@ -19,6 +28,6 @@ jobs:
       run: dub test --coverage
 
     - name: e2e tests
-      run: sh tests.sh
+      run: ${{ matrix.e2e }}
 
 
