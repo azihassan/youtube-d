@@ -1,25 +1,14 @@
 name: Release
 
-on:
-  push:
-    tags:
-      - 'v*'
+on: [push]
 
 jobs:
-  release:
+  create_release_job:
     runs-on: ubuntu-20.04
-
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
     steps:
       - uses: actions/checkout@v1
-
-      - uses: dlang-community/setup-dlang@v1
-        name: Install LDC
-        with:
-          compiler: ldc-latest
-
-      - name: Build release
-        run: dub build -b release --compiler=ldc2
-
       - name: Create release
         uses: actions/create-release@v1
         id: create_release
@@ -28,17 +17,35 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           release_name: New release of youtube-d ${{ github.ref_name }}
-          draft: false
+          draft: true
           prerelease: false
           body_path: CHANGELOG.md
+
+  upload_release_assets_job:
+    strategy:
+      matrix:
+        version: [ { os: ubuntu-20.04, suffix: x86_84, extension: '' }, { os: windows-latest, suffix: win64, extension: '.exe' }]
+
+    runs-on: ${{ matrix.version.os }}
+    needs: create_release_job
+    steps:
+      - uses: actions/checkout@v1
+
+      - uses: dlang-community/setup-dlang@v1
+        name: Install LDC
+        with:
+          compiler: ldc-latest
+
+      - name: Build release (win64)
+        run: dub build -b release --compiler=ldc2
 
       - name: Upload release
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./youtube-d
-          asset_name: youtube-d-${{ github.ref_name }}
+          upload_url: ${{ needs.create_release_job.outputs.upload_url }}
+          asset_path: ./youtube-d${{ matrix.version.extension }}
+          asset_name: youtube-d-${{ github.ref_name }}-${{ matrix.version.suffix }}${{ matrix.version.extension }}
           asset_content_type: application/octet-stream
 
