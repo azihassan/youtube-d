@@ -7,8 +7,11 @@ on:
 
 jobs:
   release:
-    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        version: [ { os: ubuntu-20.04, suffix: x86_84 }, { os: windows-latest, suffix: win64.exe }]
 
+    runs-on: ${{ matrix.version.os }}
     steps:
       - uses: actions/checkout@v1
 
@@ -39,6 +42,6 @@ jobs:
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./youtube-d
-          asset_name: youtube-d-${{ github.ref_name }}
+          asset_name: youtube-d-${{ github.ref_name }}-${{ matrix.version.suffix }}
           asset_content_type: application/octet-stream
 

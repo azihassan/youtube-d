@@ -6,15 +6,9 @@ jobs:
   test:
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        e2e: [sh tests.sh, powershell.exe -file tests.ps1]
-        exclude:
-          - os: ubuntu-latest
-            e2e:  powershell.exe -file tests.ps1
-          - os: ubuntu-latest
-            e2e: sh tests.sh
+        os: [ { name: ubuntu-20.04, command: sh tests.sh } , { name: windows-latest, command: powershell.exe -file tests.ps1 }]
 
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.os.name }}
     steps:
     - uses: actions/checkout@v1
 
@@ -28,6 +22,6 @@ jobs:
       run: dub test --coverage
 
     - name: e2e tests
-      run: ${{ matrix.e2e }}
+      run: ${{ matrix.os.command }}
 
 
