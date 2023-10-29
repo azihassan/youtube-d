@@ -6,7 +6,7 @@ jobs:
   test:
     strategy:
       matrix:
-        os: [ { name: ubuntu-20.04, command: sh tests.sh } , { name: windows-latest, command: powershell.exe -file tests.ps1 }]
+        os: [ { name: ubuntu-20.04, command: sh tests.sh, extension: '' } , { name: windows-2019, command: powershell.exe -file tests.ps1, extension: '.exe' }]
 
     runs-on: ${{ matrix.os.name }}
     steps:
@@ -24,4 +24,7 @@ jobs:
     - name: e2e tests
       run: ${{ matrix.os.command }}
 
-
+    - uses: actions/upload-artifact@v3
+      with:
+        name: youtube-d-${{ matrix.os.name }}
+        path: youtube-d${{ matrix.os.extension }}

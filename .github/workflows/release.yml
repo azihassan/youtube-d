@@ -1,6 +1,6 @@
 name: Release
 
-on: [push]
+#on: [push]
 
 jobs:
   create_release_job:
@@ -24,20 +24,18 @@ jobs:
   upload_release_assets_job:
     strategy:
       matrix:
-        version: [ { os: ubuntu-20.04, suffix: x86_84, extension: '' }, { os: windows-latest, suffix: win64, extension: '.exe' }]
+        version: [ { os: ubuntu-20.04, suffix: x86_84, extension: '' }, { os: windows-2019, suffix: win64, extension: '.exe' }]
 
     runs-on: ${{ matrix.version.os }}
     needs: create_release_job
     steps:
       - uses: actions/checkout@v1
 
-      - uses: dlang-community/setup-dlang@v1
-        name: Install LDC
-        with:
-          compiler: ldc-latest
+      - uses: mihails-strasuns/setup-dlang@v1
+        name: Install DMD
 
       - name: Build release (win64)
-        run: dub build -b release --compiler=ldc2
+        run: dub build
 
       - name: Upload release
         uses: actions/upload-release-asset@v1
