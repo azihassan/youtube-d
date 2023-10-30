@@ -13,6 +13,10 @@ ulong getContentLength(string url)
     http.method = HTTP.Method.head;
     http.addRequestHeader("User-Agent", "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:95.0) Gecko/20100101 Firefox/95.0");
     http.perform();
+    if(http.statusLine.code >= 400)
+    {
+        throw new Exception("Failed with status " ~ http.statusLine.code.to!string);
+    }
     return http.responseHeaders["content-length"].to!ulong;
 }
 

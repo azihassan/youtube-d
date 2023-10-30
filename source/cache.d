@@ -6,6 +6,7 @@ import std.datetime : SysTime, Clock, days;
 import std.file : exists, getcwd, readText, tempDir, write;
 import std.net.curl : get;
 import std.path : buildPath;
+import std.typecons : Flag, Yes, No;
 import std.string : indexOf;
 
 import helpers : StdoutLogger, parseID, parseQueryString;
@@ -15,16 +16,18 @@ struct Cache
 {
     private StdoutLogger logger;
     private string delegate(string url) downloadAsString;
+    private Flag!"forceRefresh" forceRefresh;
     string cacheDirectory;
 
-    this(StdoutLogger logger)
+    this(StdoutLogger logger, Flag!"forceRefresh" forceRefresh = No.forceRefresh)
     {
         this.logger = logger;
         downloadAsString = (string url) => url.get().idup;
+        this.forceRefresh = forceRefresh;
         cacheDirectory = tempDir();
     }
 
-    this(StdoutLogger logger, string delegate(string url) downloadAsString)
+    this(StdoutLogger logger, string delegate(string url) downloadAsString, Flag!"forceRefresh" forceRefresh = No.forceRefresh)
     {
         this(logger);
         this.downloadAsString = downloadAsString;
@@ -59,7 +62,7 @@ struct Cache
 
     private void updateCache(string url, string htmlCachePath, string baseJSCachePath, int itag)
     {
-        bool shouldRedownload = !htmlCachePath.exists() || isStale(htmlCachePath.readText(), itag);
+        bool shouldRedownload = forceRefresh || !htmlCachePath.exists() || isStale(htmlCachePath.readText(), itag);
         if(shouldRedownload)
         {
             logger.display("Cache miss, downloading HTML...");
@@ -164,4 +167,19 @@ unittest
 
     auto parser = cache.makeParser("https://youtu.be/dQw4w9WgXcQ-fresh", 18);
     assert(!downloadAttempted);
+}
+
+unittest
+{
+    writeln("When forcing refresh, should download HTML");
+    bool downloadAttempted;
+    auto downloadAsString = delegate string(string url) {
+        downloadAttempted = true;
+        return "zoz.html".readText();
+    };
+    auto cache = Cache(new StdoutLogger(), downloadAsString, Yes.forceRefresh);
+    cache.cacheDirectory = getcwd();
+
+    auto parser = cache.makeParser("https://youtu.be/zoz", 18);
+    assert(downloadAttempted);
 }

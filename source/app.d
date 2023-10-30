@@ -8,10 +8,11 @@ import std.path : buildPath;
 import std.range : iota;
 import std.logger;
 import std.getopt;
+import std.typecons : Yes, No;
 
 import downloaders;
 import helpers;
-import parsers : YoutubeFormat, YoutubeVideoURLExtractor;
+import parsers : makeParser, YoutubeFormat, YoutubeVideoURLExtractor;
 import cache : Cache;
 
 void main(string[] args)
@@ -22,6 +23,7 @@ void main(string[] args)
     bool outputURL;
     bool verbose;
     bool noProgress;
+    bool noCache;
 
     auto help = args.getopt(
         std.getopt.config.passThrough,
@@ -31,7 +33,8 @@ void main(string[] args)
         "o|output-url", "Display extracted video URL without downloading it", &outputURL,
         "p|parallel", "Download in 4 parallel connections", &parallel,
         "v|verbose", "Display debugging messages", &verbose,
-        "no-progress", "Don't display real-time progress", &noProgress
+        "no-progress", "Don't display real-time progress", &noProgress,
+        "no-cache", "Skip caching of HTML and base.js", &noCache
     );
 
     if(help.helpWanted || args.length == 1)
@@ -44,41 +47,47 @@ void main(string[] args)
 
     auto logger = new StdoutLogger(verbose);
     string[] urls = args[1 .. $];
+    int retries = 2;
 
     foreach(url; urls)
     {
-        try
+        foreach(retry; 0 .. retries)
         {
-            handleURL(
-                url,
-                itag,
-                logger,
-                displayFormats,
-                outputURL,
-                parallel,
-                noProgress
-            );
-        }
-        catch(Exception e)
-        {
-            logger.error(formatError(e.message.idup));
-            logger.displayVerbose(e.info);
-            continue;
-        }
-        finally
-        {
-            logger.display("");
-            logger.display("");
+            try
+            {
+                handleURL(
+                    url,
+                    itag,
+                    logger,
+                    displayFormats,
+                    outputURL,
+                    parallel,
+                    noProgress,
+                    retry > 0 ? true : noCache //force cache refresh on failure
+                );
+                break;
+            }
+            catch(Exception e)
+            {
+                logger.error(formatError(e.message.idup));
+                logger.displayVerbose(e.info);
+                logger.error("Retry ", retry + 1, " of ", retries);
+                continue;
+            }
+            finally
+            {
+                logger.display("");
+                logger.display("");
+            }
         }
     }
 }
 
-void handleURL(string url, int itag, StdoutLogger logger, bool displayFormats, bool outputURL, bool parallel, bool noProgress)
+void handleURL(string url, int itag, StdoutLogger logger, bool displayFormats, bool outputURL, bool parallel, bool noProgress, bool noCache)
 {
-    auto cache = Cache(logger);
     logger.display(formatTitle("Handling " ~ url));
+    YoutubeVideoURLExtractor parser = Cache(logger, noCache ? Yes.forceRefresh : No.forceRefresh).makeParser(url, itag);
     logger.displayVerbose("Downloaded video HTML");
-    YoutubeVideoURLExtractor parser = cache.makeParser(url, itag);
 
     if(displayFormats)
     {
