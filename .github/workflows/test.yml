@@ -3,12 +3,14 @@ name: Unit tests
 on: [push]
 
 jobs:
-  test:
+  unit_test:
     strategy:
       matrix:
-        os: [ { name: ubuntu-20.04, command: sh tests.sh, extension: '' } , { name: windows-2019, command: powershell.exe -file tests.ps1, extension: '.exe' }]
+        #os: [ { name: ubuntu-20.04, extension: '' } , { name: windows-2019, extension: '.exe' }]
+        os: [ { name: windows-2019, extension: '.exe' } ]
 
     runs-on: ${{ matrix.os.name }}
+
     steps:
     - uses: actions/checkout@v1
 
@@ -21,10 +23,31 @@ jobs:
     - name: Unit tests
       run: dub test --coverage
 
-    - name: e2e tests
-      run: ${{ matrix.os.command }}
-
     - uses: actions/upload-artifact@v3
       with:
         name: youtube-d-${{ matrix.os.name }}
         path: youtube-d${{ matrix.os.extension }}
+
+  console_test:
+    strategy:
+      matrix:
+        #os: [ { name: ubuntu-20.04, command: sh tests.sh, extension: '' } , { name: windows-2019, command: powershell.exe -file tests.ps1, extension: '.exe' }]
+        os: [ { name: windows-2019, command: powershell.exe -file tests.ps1, extension: '.exe' } ]
+
+    runs-on: ${{ matrix.os.name }}
+    needs: unit_test
+
+    steps:
+    - uses: actions/checkout@v1
+
+    - uses: actions/download-artifact@v3
+      with:
+        name: youtube-d-${{ matrix.os.name }}
+        #path: youtube-d${{ matrix.os.extension }}
+
+        #- name: Setup tmate session
+        #uses: mxschmitt/action-tmate@v3
+
+    - name: e2e tests
+      run: ${{ matrix.os.command }}
+
