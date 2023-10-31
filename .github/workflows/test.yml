@@ -40,13 +40,15 @@ jobs:
     steps:
     - uses: actions/checkout@v1
 
+    - run: |
+        curl -LO https://downloads.dlang.org/other/libcurl-7.68.0-WinSSL-zlib-x86-x64.zip
+        tar -xf libcurl-7.68.0-WinSSL-zlib-x86-x64.zip
+        dir
+        xcopy dmd2\windows\bin64\libcurl.dll .
+
     - uses: actions/download-artifact@v3
       with:
         name: youtube-d-${{ matrix.os.name }}
-        #path: youtube-d${{ matrix.os.extension }}
-
-        #- name: Setup tmate session
-        #uses: mxschmitt/action-tmate@v3
 
     - name: e2e tests
       run: ${{ matrix.os.command }}

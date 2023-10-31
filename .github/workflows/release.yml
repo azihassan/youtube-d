@@ -1,6 +1,6 @@
 name: Release
 
-#on: [push]
+on: [push]
 
 jobs:
   create_release_job:
@@ -24,18 +24,35 @@ jobs:
   upload_release_assets_job:
     strategy:
       matrix:
-        version: [ { os: ubuntu-20.04, suffix: x86_84, extension: '' }, { os: windows-2019, suffix: win64, extension: '.exe' }]
+        version: [ { os: ubuntu-20.04, suffix: x86_64, extension: '' }, { os: windows-latest, suffix: win64, extension: '.exe' }]
 
     runs-on: ${{ matrix.version.os }}
     needs: create_release_job
     steps:
       - uses: actions/checkout@v1
 
-      - uses: mihails-strasuns/setup-dlang@v1
-        name: Install DMD
+      - uses: dlang-community/setup-dlang@v1
+        name: Install LDC
+        with:
+          compiler: ldc-latest
 
-      - name: Build release (win64)
-        run: dub build
+      - name: Build release
+        run: dub build -b release --compiler=ldc2
+
+      - name: Prepare assets (Windows)
+        if: matrix.version.suffix == 'win64'
+        run: |
+          curl -LO https://downloads.dlang.org/other/libcurl-7.68.0-WinSSL-zlib-x86-x64.zip
+          tar -xf libcurl-7.68.0-WinSSL-zlib-x86-x64.zip
+          xcopy dmd2\windows\bin64\libcurl.dll .
+          rm -r dmd2
+          rm libcurl-7.68.0-WinSSL-zlib-x86-x64.zip
+          tar cavf youtube-d-${{ matrix.version.suffix }}.zip youtube-d${{ matrix.version.extension }} libcurl.dll
+
+      - name: Prepare assets (Linux)
+        if: matrix.version.suffix == 'x86_64'
+        run: |
+          zip youtube-d-${{ matrix.version.suffix }}.zip youtube-d${{ matrix.version.extension }}
 
       - name: Upload release
         uses: actions/upload-release-asset@v1
@@ -43,7 +60,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.create_release_job.outputs.upload_url }}
-          asset_path: ./youtube-d${{ matrix.version.extension }}
-          asset_name: youtube-d-${{ github.ref_name }}-${{ matrix.version.suffix }}${{ matrix.version.extension }}
-          asset_content_type: application/octet-stream
+          asset_path: ./youtube-d-${{ matrix.version.suffix }}.zip
+          asset_name: youtube-d-${{ matrix.version.suffix }}
+          asset_content_type: application/zip
 
