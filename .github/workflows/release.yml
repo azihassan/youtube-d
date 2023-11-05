@@ -1,6 +1,9 @@
 name: Release
 
-on: [push]
+on:
+  push:
+    tags:
+      - 'v*'
 
 jobs:
   create_release_job:
@@ -17,7 +20,7 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           release_name: New release of youtube-d ${{ github.ref_name }}
-          draft: true
+          draft: false
           prerelease: false
           body_path: CHANGELOG.md
 
@@ -61,6 +64,6 @@ jobs:
         with:
           upload_url: ${{ needs.create_release_job.outputs.upload_url }}
           asset_path: ./youtube-d-${{ matrix.version.suffix }}.zip
-          asset_name: youtube-d-${{ matrix.version.suffix }}
+          asset_name: youtube-d-${{ matrix.version.suffix }}.zip
           asset_content_type: application/zip
 
