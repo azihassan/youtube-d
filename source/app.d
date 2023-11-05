@@ -15,6 +15,8 @@ import helpers;
 import parsers : makeParser, YoutubeFormat, YoutubeVideoURLExtractor;
 import cache : Cache;
 
+pragma(lib, "curl");
+
 void main(string[] args)
 {
     int itag = 18;
