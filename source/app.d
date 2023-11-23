@@ -17,6 +17,17 @@ import cache : Cache;
 
 pragma(lib, "curl");
 
+version(linux)
+{
+    import core.sys.posix.signal;
+    import core.stdc.stdio;
+
+    extern(C) void signalHandler(int signal) nothrow @nogc
+    {
+        printf("Caught signal %d\n", signal);
+    }
+}
+
 void main(string[] args)
 {
     int itag = 18;
@@ -26,6 +37,11 @@ void main(string[] args)
     bool verbose;
     bool noProgress;
     bool noCache;
+
+    version(linux)
+    {
+        signal(SIGPIPE, &signalHandler);
+    }
 
     auto help = args.getopt(
         std.getopt.config.passThrough,
