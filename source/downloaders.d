@@ -45,6 +45,9 @@ class RegularDownloader : Downloader
         http.set(CurlOption.referer, referer);
         http.set(CurlOption.followlocation, true);
         http.set(CurlOption.failonerror, true);
+        http.set(CurlOption.timeout, 60 * 3);
+        http.set(CurlOption.connecttimeout, 60 * 3);
+        http.set(CurlOption.nosignal, true);
 
         http.onReceiveHeader = (in char[]  header) {
             logger.displayVerbose(header);
