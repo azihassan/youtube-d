@@ -4,7 +4,8 @@
 	],
 	"copyright": "Copyright © 2023, Hassan Azi",
 	"dependencies": {
-		"htmld": "~>0.3.7"
+		"htmld": "~>0.3.7",
+		"duktape": "~>0.4.0"
 	},
 	"description": "Youtube downloader",
 	"license": "MIT",

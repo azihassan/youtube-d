@@ -6,13 +6,13 @@ import std.typecons : tuple, Tuple;
 import std.conv : to;
 import std.array : replace;
 import std.file : readText;
-import std.string : indexOf, format, lastIndexOf, split, strip;
+import std.string : indexOf, format, lastIndexOf, split, strip, toStringz;
 import std.algorithm : canFind, filter, reverse, map;
-//import std.range : filter;
 
-import helpers : parseQueryString, matchOrFail, StdoutLogger;
+import helpers : parseQueryString, matchOrFail, StdoutLogger, formatError;
 
 import html;
+import duktape;
 
 abstract class YoutubeVideoURLExtractor
 {
@@ -29,7 +29,6 @@ abstract class YoutubeVideoURLExtractor
 
     public string getID()
     {
-        //return parser.querySelector("meta[itemprop=videoId], meta[itemprop=identifier]").attr("content").idup;
         auto meta = parser.querySelector("meta[itemprop=videoId]");
         if(meta is null)
         {
@@ -468,9 +467,39 @@ struct ThrottlingAlgorithm
         return javascript.matchOrFail(challengeName ~ `=function\(a\)\{((.|\s)+?)\};`).strip();
     }
 
-    string decrypt(string signatureCipher)
+    string solve(string n)
     {
-        return "";
+        duk_context *ctx = duk_create_heap_default();
+        if(!ctx)
+        {
+            logger.display("Failed to create a Duktape heap.");
+            return n;
+        }
+
+        scope(exit)
+        {
+            duk_destroy_heap(ctx);
+        }
+
+        try
+        {
+            string implementation = format!`(function() {var a="%s";%s })()`(n, findChallengeImplementation());
+            if(duk_peval_string(ctx, implementation.toStringz()) != 0)
+            {
+                writef("Error: %s\n", duk_safe_to_string(ctx, -1).to!string);
+                return n;
+            }
+
+            string result = duk_get_string(ctx, -1).to!string;
+            logger.display(result);
+            return result;
+        }
+        catch(Exception e)
+        {
+            logger.display("Failed to solve N parameter, downloads might be rate limited".formatError());
+            logger.display(e.message.idup.formatError());
+            return n;
+        }
     }
 }
 
@@ -503,4 +532,9 @@ c[59]),(0,c[36])(c[30],c[47]),c[36+Math.pow(7,3)%60])(c[6],c[40]):((0,c[66])((0,
 1E3],c[49]),c[76])(c[46],c[10]),c[26])(c[Math.pow(2,2)+37312-37297],(0,c[27])(),c[46]),c[45])(c[48],c[52]),(0,c[16])(c[75]),c[23])((0,c[26])(c[9],(0,c[54])(),c[75]),c[new Date("1970-01-01T07:01:01.000+07:00")/1E3],(0,c[76])(c[48],c[35]),c[75]),c[23])((((0,c[16])(c[48]),c[74])(c[59],c[75]),c[74])(c[33],c[48]),c[16],(0,c[76])(c[46],c[72]),c[46]),[])||(0,c[77])((((((0,c[26])(c[9],(0,c[66])(),c[46]),((0,c[45])(c[48],c[42]),c[26])(c[19],(0,c[66])(),c[46])^(0,c[26])(c[9],(0,c[27])(),c[75]),c[2])(c[75],
 c[82]),(0,c[26])(c[19],(0,c[66])(),c[46]),c[26])(c[9],(0,c[27])(),c[46]),c[23])((0,c[12])(c[46],c[81]),c[26],(0,c[45])(c[46],c[68]),c[19],(0,c[54])(),c[46]),c[77])((0,c[23092+Math.pow(2,new Date("1969-12-31T16:15:02.000-07:45")/1E3)+-23022])(c[53],c[46]),c[74],c[36],c[48]),c[26],c[19],(0,c[66])(),c[48]))}catch(d){(0,c[26])(c[19],(0,c[66])(),c[48]),(0,c[77])((0,c[2])(c[46],c[64]),c[61],c[46]),(0,c[12])(c[55],c[81*Math.pow(4,5)+-82931])}}catch(d){return"enhanced_except_2ZcBpuj-_w8_"+a}return b.join("")`;
     assert(actual == expected, actual ~ " != " ~ expected);
+
+    expected = "BXfVEoYTXMkKsg";
+    actual = algorithm.solve("TVXfDeJvgqqwQZo");
+
+    assert(expected == actual, expected ~ " != " ~ actual);
 }

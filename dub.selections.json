@@ -1,6 +1,7 @@
 {
 	"fileVersion": 1,
 	"versions": {
+		"duktape": "0.4.0",
 		"htmld": "0.3.7"
 	}
 }
