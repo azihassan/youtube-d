@@ -36,11 +36,11 @@ struct Cache
     YoutubeVideoURLExtractor makeParser(string url, int itag)
     {
         string html = getHTML(url, itag);
+        string baseJS = getBaseJS(url, itag);
         if(html.indexOf("signatureCipher:") == -1)
         {
-            return new SimpleYoutubeVideoURLExtractor(html, logger);
+            return new SimpleYoutubeVideoURLExtractor(html, baseJS, logger);
         }
-        string baseJS = getBaseJS(url, itag);
         return new AdvancedYoutubeVideoURLExtractor(html, baseJS, logger);
     }
 
@@ -80,7 +80,7 @@ struct Cache
     private bool isStale(string html, int itag)
     {
         YoutubeVideoURLExtractor shallowParser = html.indexOf("signatureCipher:") == -1
-            ? new SimpleYoutubeVideoURLExtractor(html, logger)
+            ? new SimpleYoutubeVideoURLExtractor(html, "", logger)
             : new AdvancedYoutubeVideoURLExtractor(html, "", logger);
         ulong expire = shallowParser.findExpirationTimestamp(itag);
         return SysTime.fromUnixTime(expire) < Clock.currTime();

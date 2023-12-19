@@ -75,6 +75,7 @@ abstract class YoutubeVideoURLExtractor
 
 class SimpleYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
 {
+    private string baseJS;
     private StdoutLogger logger;
     this(string html, StdoutLogger logger)
     {
@@ -83,11 +84,29 @@ class SimpleYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
         parser = createDocument(html);
     }
 
+    this(string html, string baseJS, StdoutLogger logger)
+    {
+        this(html, logger);
+        this.baseJS = baseJS;
+    }
+
     override string getURL(int itag = 18)
     {
-        return html
+        string url = html
             .matchOrFail(`"itag":` ~ itag.to!string ~ `,"url":"(.*?)"`)
             .replace(`\u0026`, "&");
+
+        if(baseJS == "")
+        {
+            return url;
+        }
+
+        string n = url.parseQueryString()["n"];
+        logger.displayVerbose("Found n : ", n);
+        auto solver = ThrottlingAlgorithm(baseJS, logger);
+        string solvedN = solver.solve(n);
+        logger.displayVerbose("Solved n : ", solvedN);
+        return url.replace("&n=" ~ n, "&n=" ~ solvedN);
     }
 
     override ulong findExpirationTimestamp(int itag)
@@ -464,6 +483,7 @@ struct ThrottlingAlgorithm
     string findChallengeImplementation()
     {
         string challengeName = findChallengeName();
+        logger.displayVerbose("challenge name : ", challengeName);
         return javascript.matchOrFail(challengeName ~ `=function\(a\)\{((.|\s)+?)\};`).strip();
     }
 
@@ -484,6 +504,7 @@ struct ThrottlingAlgorithm
         try
         {
             string implementation = format!`(function() {var a="%s";%s })()`(n, findChallengeImplementation());
+            logger.displayVerbose("challenge implementation : ", implementation);
             if(duk_peval_string(ctx, implementation.toStringz()) != 0)
             {
                 writef("Error: %s\n", duk_safe_to_string(ctx, -1).to!string);
