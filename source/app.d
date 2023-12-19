@@ -104,7 +104,8 @@ void main(string[] args)
 void handleURL(string url, int itag, StdoutLogger logger, bool displayFormats, bool outputURL, bool parallel, bool noProgress, bool noCache)
 {
     logger.display(formatTitle("Handling " ~ url));
-    YoutubeVideoURLExtractor parser = Cache(logger, noCache ? Yes.forceRefresh : No.forceRefresh).makeParser(url, itag);
+    auto shallow = displayFormats ? Yes.shallow : No.shallow;
+    YoutubeVideoURLExtractor parser = Cache(logger, noCache ? Yes.forceRefresh : No.forceRefresh).makeParser(url, itag, shallow);
     logger.displayVerbose("Downloaded video HTML");
 
     if(displayFormats)

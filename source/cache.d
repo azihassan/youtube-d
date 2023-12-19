@@ -33,10 +33,18 @@ struct Cache
         this.downloadAsString = downloadAsString;
     }
 
-    YoutubeVideoURLExtractor makeParser(string url, int itag)
+    YoutubeVideoURLExtractor makeParser(string url, int itag, Flag!"shallow" shallow = Yes.shallow)
     {
         string html = getHTML(url, itag);
-        string baseJS = getBaseJS(url, itag);
+        string baseJS = "";
+        if(!shallow)
+        {
+            baseJS = getBaseJS(url, itag);
+        }
+        else
+        {
+            logger.displayVerbose("Shallow mode, skipping base.js download");
+        }
         if(html.indexOf("signatureCipher:") == -1)
         {
             return new SimpleYoutubeVideoURLExtractor(html, baseJS, logger);
