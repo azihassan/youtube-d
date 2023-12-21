@@ -19,7 +19,7 @@ abstract class YoutubeVideoURLExtractor
     protected string html;
     protected Document parser;
 
-    abstract public string getURL(int itag = 18);
+    abstract public string getURL(int itag, bool attemptDethrottle = false);
     abstract public ulong findExpirationTimestamp(int itag);
 
     public string getTitle()
@@ -90,13 +90,13 @@ class SimpleYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
         this.baseJS = baseJS;
     }
 
-    override string getURL(int itag = 18)
+    override string getURL(int itag, bool attemptDethrottle = false)
     {
         string url = html
             .matchOrFail(`"itag":` ~ itag.to!string ~ `,"url":"(.*?)"`)
             .replace(`\u0026`, "&");
 
-        if(baseJS == "")
+        if(baseJS == "" || !attemptDethrottle)
         {
             return url;
         }
@@ -216,13 +216,26 @@ class AdvancedYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
         this.logger = logger;
     }
 
-    override string getURL(int itag = 18)
+    override string getURL(int itag, bool attemptDethrottle = false)
     {
         string signatureCipher = findSignatureCipher(itag);
         string[string] params = signatureCipher.parseQueryString();
         auto algorithm = EncryptionAlgorithm(baseJS, logger);
         string sig = algorithm.decrypt(params["s"]);
-        return params["url"].decodeComponent() ~ "&" ~ params["sp"] ~ "=" ~ sig;
+        string url = params["url"].decodeComponent() ~ "&" ~ params["sp"] ~ "=" ~ sig;
+
+        string[string] urlParams = url.parseQueryString();
+        if("n" !in urlParams || !attemptDethrottle)
+        {
+            return url;
+        }
+
+        string n = urlParams["n"];
+        logger.displayVerbose("Found n : ", n);
+        auto solver = ThrottlingAlgorithm(baseJS, logger);
+        string solvedN = solver.solve(n);
+        logger.displayVerbose("Solved n : ", solvedN);
+        return url.replace("&n=" ~ n, "&n=" ~ solvedN);
     }
 
     override ulong findExpirationTimestamp(int itag)
