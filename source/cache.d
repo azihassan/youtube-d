@@ -35,29 +35,17 @@ struct Cache
 
     YoutubeVideoURLExtractor makeParser(string url, int itag)
     {
-        string html = getHTML(url, itag);
+        string htmlCachePath = getCachePath(url) ~ ".html";
+        string baseJSCachePath = getCachePath(url) ~ ".js";
+        updateCache(url, htmlCachePath, baseJSCachePath, itag);
+
+        string html = htmlCachePath.readText();
+        string baseJS = baseJSCachePath.readText();
         if(html.indexOf("signatureCipher:") == -1)
         {
-            return new SimpleYoutubeVideoURLExtractor(html, logger);
+            return new SimpleYoutubeVideoURLExtractor(html, baseJS, logger);
         }
-        string baseJS = getBaseJS(url, itag);
         return new AdvancedYoutubeVideoURLExtractor(html, baseJS, logger);
-    }
-
-    private string getHTML(string url, int itag)
-    {
-        string htmlCachePath = getCachePath(url) ~ ".html";
-        string baseJSCachePath = getCachePath(url) ~ ".js";
-        updateCache(url, htmlCachePath, baseJSCachePath, itag);
-        return htmlCachePath.readText();
-    }
-
-    private string getBaseJS(string url, int itag)
-    {
-        string htmlCachePath = getCachePath(url) ~ ".html";
-        string baseJSCachePath = getCachePath(url) ~ ".js";
-        updateCache(url, htmlCachePath, baseJSCachePath, itag);
-        return baseJSCachePath.readText();
     }
 
     private void updateCache(string url, string htmlCachePath, string baseJSCachePath, int itag)
@@ -80,7 +68,7 @@ struct Cache
     private bool isStale(string html, int itag)
     {
         YoutubeVideoURLExtractor shallowParser = html.indexOf("signatureCipher:") == -1
-            ? new SimpleYoutubeVideoURLExtractor(html, logger)
+            ? new SimpleYoutubeVideoURLExtractor(html, "", logger)
             : new AdvancedYoutubeVideoURLExtractor(html, "", logger);
         ulong expire = shallowParser.findExpirationTimestamp(itag);
         return SysTime.fromUnixTime(expire) < Clock.currTime();
@@ -126,6 +114,7 @@ unittest
     cache.cacheDirectory = getcwd();
 
     "zoz-fresh.html".write("zoz.html".readText().dup.replace("expire=1638935038", "expire=" ~ tomorrow.toUnixTime().to!string));
+    "zoz-fresh.js".write("base.min.js".readText());
 
     auto parser = cache.makeParser("https://youtu.be/zoz-fresh", 18);
     assert(!downloadAttempted);

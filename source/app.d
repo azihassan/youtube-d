@@ -37,6 +37,7 @@ void main(string[] args)
     bool verbose;
     bool noProgress;
     bool noCache;
+    bool dethrottle;
 
     version(linux)
     {
@@ -52,7 +53,8 @@ void main(string[] args)
         "p|parallel", "Download in 4 parallel connections", &parallel,
         "v|verbose", "Display debugging messages", &verbose,
         "no-progress", "Don't display real-time progress", &noProgress,
-        "no-cache", "Skip caching of HTML and base.js", &noCache
+        "no-cache", "Skip caching of HTML and base.js", &noCache,
+        "d|dethrottle", "Attempt to dethrottle download speed by solving the N challenge", &dethrottle,
     );
 
     if(help.helpWanted || args.length == 1)
@@ -81,7 +83,8 @@ void main(string[] args)
                     outputURL,
                     parallel,
                     noProgress,
-                    retry > 0 ? true : noCache //force cache refresh on failure
+                    retry > 0 ? true : noCache, //force cache refresh on failure,
+                    dethrottle
                 );
                 break;
             }
@@ -101,7 +104,7 @@ void main(string[] args)
     }
 }
 
-void handleURL(string url, int itag, StdoutLogger logger, bool displayFormats, bool outputURL, bool parallel, bool noProgress, bool noCache)
+void handleURL(string url, int itag, StdoutLogger logger, bool displayFormats, bool outputURL, bool parallel, bool noProgress, bool noCache, bool dethrottle)
 {
     logger.display(formatTitle("Handling " ~ url));
     YoutubeVideoURLExtractor parser = Cache(logger, noCache ? Yes.forceRefresh : No.forceRefresh).makeParser(url, itag);
@@ -115,14 +118,13 @@ void handleURL(string url, int itag, StdoutLogger logger, bool displayFormats, b
         return;
     }
 
-    logger.display(parser.getID());
     logger.display(parser.getTitle());
     YoutubeFormat youtubeFormat = parser.getFormat(itag);
     string filename = format!"%s-%s-%d.%s"(parser.getTitle(), parser.getID(), itag, youtubeFormat.extension).sanitizePath();
     logger.displayVerbose(filename);
     string destination = buildPath(getcwd(), filename);
     logger.displayVerbose(destination);
-    string link = parser.getURL(itag);
+    string link = parser.getURL(itag, dethrottle);
 
     logger.displayVerbose(parser.getID() ~ ".html");
     logger.displayVerbose("Found link : ", link);
@@ -149,14 +151,18 @@ void handleURL(string url, int itag, StdoutLogger logger, bool displayFormats, b
     else
     {
         logger.display("Using RegularDownloader");
+        bool finished = false;
         downloader = new RegularDownloader(logger, (size_t total, size_t current) {
-            if(current == 0 || total == 0)
+            if(current == 0 || total == 0 || finished)
             {
                 return 0;
             }
-            if(current >= total)
+            if(current == total)
             {
+                logger.display("");
                 logger.display("Done !".formatSuccess());
+                finished = true;
+                return 0;
             }
             auto percentage = 100.0 * (cast(float)(current) / total);
             writef!"\r[%.2f %%] %.2f / %.2f MB"(percentage, current / 1024.0 / 1024.0, total / 1024.0 / 1024.0);

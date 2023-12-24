@@ -6,20 +6,20 @@ import std.typecons : tuple, Tuple;
 import std.conv : to;
 import std.array : replace;
 import std.file : readText;
-import std.string : indexOf, format, lastIndexOf, split, strip;
+import std.string : indexOf, format, lastIndexOf, split, strip, toStringz;
 import std.algorithm : canFind, filter, reverse, map;
-//import std.range : filter;
 
-import helpers : parseQueryString, matchOrFail, StdoutLogger;
+import helpers : parseQueryString, matchOrFail, StdoutLogger, formatError;
 
 import html;
+import duktape;
 
 abstract class YoutubeVideoURLExtractor
 {
     protected string html;
     protected Document parser;
 
-    abstract public string getURL(int itag = 18);
+    abstract public string getURL(int itag, bool attemptDethrottle = false);
     abstract public ulong findExpirationTimestamp(int itag);
 
     public string getTitle()
@@ -29,7 +29,6 @@ abstract class YoutubeVideoURLExtractor
 
     public string getID()
     {
-        //return parser.querySelector("meta[itemprop=videoId], meta[itemprop=identifier]").attr("content").idup;
         auto meta = parser.querySelector("meta[itemprop=videoId]");
         if(meta is null)
         {
@@ -76,6 +75,7 @@ abstract class YoutubeVideoURLExtractor
 
 class SimpleYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
 {
+    private string baseJS;
     private StdoutLogger logger;
     this(string html, StdoutLogger logger)
     {
@@ -84,11 +84,30 @@ class SimpleYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
         parser = createDocument(html);
     }
 
-    override string getURL(int itag = 18)
+    this(string html, string baseJS, StdoutLogger logger)
     {
-        return html
+        this(html, logger);
+        this.baseJS = baseJS;
+    }
+
+    override string getURL(int itag, bool attemptDethrottle = false)
+    {
+        string url = html
             .matchOrFail(`"itag":` ~ itag.to!string ~ `,"url":"(.*?)"`)
             .replace(`\u0026`, "&");
+
+        string[string] queryString = url.parseQueryString();
+        if(baseJS == "" || !attemptDethrottle || "n" !in queryString)
+        {
+            return url;
+        }
+
+        string n = queryString["n"];
+        logger.displayVerbose("Found n : ", n);
+        auto solver = ThrottlingAlgorithm(baseJS, logger);
+        string solvedN = solver.solve(n);
+        logger.displayVerbose("Solved n : ", solvedN);
+        return url.replace("&n=" ~ n, "&n=" ~ solvedN);
     }
 
     override ulong findExpirationTimestamp(int itag)
@@ -198,13 +217,26 @@ class AdvancedYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
         this.logger = logger;
     }
 
-    override string getURL(int itag = 18)
+    override string getURL(int itag, bool attemptDethrottle = false)
     {
         string signatureCipher = findSignatureCipher(itag);
         string[string] params = signatureCipher.parseQueryString();
         auto algorithm = EncryptionAlgorithm(baseJS, logger);
         string sig = algorithm.decrypt(params["s"]);
-        return params["url"].decodeComponent() ~ "&" ~ params["sp"] ~ "=" ~ sig;
+        string url = params["url"].decodeComponent() ~ "&" ~ params["sp"] ~ "=" ~ sig;
+
+        string[string] urlParams = url.parseQueryString();
+        if("n" !in urlParams || !attemptDethrottle)
+        {
+            return url;
+        }
+
+        string n = urlParams["n"];
+        logger.displayVerbose("Found n : ", n);
+        auto solver = ThrottlingAlgorithm(baseJS, logger);
+        string solvedN = solver.solve(n);
+        logger.displayVerbose("Solved n : ", solvedN);
+        return url.replace("&n=" ~ n, "&n=" ~ solvedN);
     }
 
     override ulong findExpirationTimestamp(int itag)
@@ -236,6 +268,7 @@ class AdvancedYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
         }
         return html[startIndex + 1 .. endIndex].replace(`\u0026`, "&");
     }
+
 }
 
 unittest
@@ -439,4 +472,81 @@ unittest
     auto algorithm = EncryptionAlgorithm("base.min.js".readText(), new StdoutLogger());
     string signature = algorithm.decrypt("L%3D%3DgKKNERRt_lv67W%3DvA4fU6N2qzrARSUbfqeXlAL827irDQICgwCLRfLgHEW2t5_GLJtRC-yoiR8sy0JR-uqLLRJlLJbgIQRw8JQ0qO1");
     assert(signature == "AOq0QJ8wRQIgbJLlJRLLqu-RJ0ys8Rioy-CRtJLG_5t2WEHgLfRLCwgCIQDri728L1lXeqfbUSRArzq2N6Uf4AvLW76vl_tRRENKKg%3D%3D");
+}
+
+struct ThrottlingAlgorithm
+{
+    alias Step = Tuple!(string, ulong);
+
+    string javascript;
+    private StdoutLogger logger;
+    string[string] obfuscatedStepFunctionNames;
+    Step[] steps;
+
+    this(string javascript, StdoutLogger logger)
+    {
+        this.javascript = javascript;
+        this.logger = logger;
+    }
+
+    string findChallengeName()
+    {
+        return javascript.matchOrFail!(`\|\|([a-zA-Z]{3})\(""\)`, false);
+    }
+
+    string findChallengeImplementation()
+    {
+        string challengeName = findChallengeName();
+        logger.displayVerbose("challenge name : ", challengeName);
+        return javascript.matchOrFail(challengeName ~ `=function\(a\)\{((.|\s)+?)\};`).strip();
+    }
+
+    string solve(string n)
+    {
+        duk_context *context = duk_create_heap_default();
+        if(!context)
+        {
+            logger.display("Failed to create a Duktape heap.");
+            return n;
+        }
+
+        scope(exit)
+        {
+            duk_destroy_heap(context);
+        }
+
+        try
+        {
+            string implementation = format!`var descramble = function(a) { %s }`(findChallengeImplementation());
+            duk_peval_string(context, implementation.toStringz());
+            duk_get_global_string(context, "descramble");
+            duk_push_string(context, n.toStringz());
+            if(duk_pcall(context, 1) != 0)
+            {
+                throw new Exception(duk_safe_to_string(context, -1).to!string);
+            }
+
+            string result = duk_get_string(context, -1).to!string;
+            duk_pop(context);
+            return result;
+        }
+        catch(Exception e)
+        {
+            logger.display(e.message.idup.formatError());
+            logger.display("Failed to solve N parameter, downloads might be rate limited".formatError());
+            return n;
+        }
+    }
+}
+
+unittest
+{
+    writeln("Should parse challenge");
+    auto algorithm = ThrottlingAlgorithm("base.min.js".readText(), new StdoutLogger());
+    assert(algorithm.findChallengeName() == "ima", algorithm.findChallengeName() ~ " != ima");
+
+    string expected = "BXfVEoYTXMkKsg";
+    string actual = algorithm.solve("TVXfDeJvgqqwQZo");
+
+    assert(expected == actual, expected ~ " != " ~ actual);
 }
