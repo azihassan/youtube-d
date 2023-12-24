@@ -153,14 +153,18 @@ void handleURL(string url, int itag, StdoutLogger logger, bool displayFormats, b
     else
     {
         logger.display("Using RegularDownloader");
+        bool finished = false;
         downloader = new RegularDownloader(logger, (size_t total, size_t current) {
-            if(current == 0 || total == 0)
+            if(current == 0 || total == 0 || finished)
             {
                 return 0;
             }
-            if(current >= total)
+            if(current == total)
             {
+                logger.display("");
                 logger.display("Done !".formatSuccess());
+                finished = true;
+                return 0;
             }
             auto percentage = 100.0 * (cast(float)(current) / total);
             writef!"\r[%.2f %%] %.2f / %.2f MB"(percentage, current / 1024.0 / 1024.0, total / 1024.0 / 1024.0);
