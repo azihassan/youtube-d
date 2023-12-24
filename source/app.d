@@ -54,7 +54,7 @@ void main(string[] args)
         "v|verbose", "Display debugging messages", &verbose,
         "no-progress", "Don't display real-time progress", &noProgress,
         "no-cache", "Skip caching of HTML and base.js", &noCache,
-        "d|dethrottle", "Dethrottle URL by solving the N challenge", &dethrottle,
+        "d|dethrottle", "Attempt to dethrottle download speed by solving the N challenge", &dethrottle,
     );
 
     if(help.helpWanted || args.length == 1)
@@ -107,8 +107,7 @@ void main(string[] args)
 void handleURL(string url, int itag, StdoutLogger logger, bool displayFormats, bool outputURL, bool parallel, bool noProgress, bool noCache, bool dethrottle)
 {
     logger.display(formatTitle("Handling " ~ url));
-    auto shallow = displayFormats ? Yes.shallow : No.shallow;
-    YoutubeVideoURLExtractor parser = Cache(logger, noCache ? Yes.forceRefresh : No.forceRefresh).makeParser(url, itag, shallow);
+    YoutubeVideoURLExtractor parser = Cache(logger, noCache ? Yes.forceRefresh : No.forceRefresh).makeParser(url, itag);
     logger.displayVerbose("Downloaded video HTML");
 
     if(displayFormats)

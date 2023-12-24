@@ -33,39 +33,19 @@ struct Cache
         this.downloadAsString = downloadAsString;
     }
 
-    YoutubeVideoURLExtractor makeParser(string url, int itag, Flag!"shallow" shallow = Yes.shallow)
+    YoutubeVideoURLExtractor makeParser(string url, int itag)
     {
-        string html = getHTML(url, itag);
-        string baseJS = "";
-        if(!shallow)
-        {
-            baseJS = getBaseJS(url, itag);
-        }
-        else
-        {
-            logger.displayVerbose("Shallow mode, skipping base.js download");
-        }
+        string htmlCachePath = getCachePath(url) ~ ".html";
+        string baseJSCachePath = getCachePath(url) ~ ".js";
+        updateCache(url, htmlCachePath, baseJSCachePath, itag);
+
+        string html = htmlCachePath.readText();
+        string baseJS = baseJSCachePath.readText();
         if(html.indexOf("signatureCipher:") == -1)
         {
             return new SimpleYoutubeVideoURLExtractor(html, baseJS, logger);
         }
         return new AdvancedYoutubeVideoURLExtractor(html, baseJS, logger);
-    }
-
-    private string getHTML(string url, int itag)
-    {
-        string htmlCachePath = getCachePath(url) ~ ".html";
-        string baseJSCachePath = getCachePath(url) ~ ".js";
-        updateCache(url, htmlCachePath, baseJSCachePath, itag);
-        return htmlCachePath.readText();
-    }
-
-    private string getBaseJS(string url, int itag)
-    {
-        string htmlCachePath = getCachePath(url) ~ ".html";
-        string baseJSCachePath = getCachePath(url) ~ ".js";
-        updateCache(url, htmlCachePath, baseJSCachePath, itag);
-        return baseJSCachePath.readText();
     }
 
     private void updateCache(string url, string htmlCachePath, string baseJSCachePath, int itag)
@@ -134,6 +114,7 @@ unittest
     cache.cacheDirectory = getcwd();
 
     "zoz-fresh.html".write("zoz.html".readText().dup.replace("expire=1638935038", "expire=" ~ tomorrow.toUnixTime().to!string));
+    "zoz-fresh.js".write("base.min.js".readText());
 
     auto parser = cache.makeParser("https://youtu.be/zoz-fresh", 18);
     assert(!downloadAttempted);
