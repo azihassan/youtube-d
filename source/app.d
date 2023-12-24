@@ -118,7 +118,6 @@ void handleURL(string url, int itag, StdoutLogger logger, bool displayFormats, b
         return;
     }
 
-    logger.display(parser.getID());
     logger.display(parser.getTitle());
     YoutubeFormat youtubeFormat = parser.getFormat(itag);
     string filename = format!"%s-%s-%d.%s"(parser.getTitle(), parser.getID(), itag, youtubeFormat.extension).sanitizePath();

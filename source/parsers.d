@@ -96,12 +96,13 @@ class SimpleYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
             .matchOrFail(`"itag":` ~ itag.to!string ~ `,"url":"(.*?)"`)
             .replace(`\u0026`, "&");
 
-        if(baseJS == "" || !attemptDethrottle)
+        string[string] queryString = url.parseQueryString();
+        if(baseJS == "" || !attemptDethrottle || "n" !in queryString)
         {
             return url;
         }
 
-        string n = url.parseQueryString()["n"];
+        string n = queryString["n"];
         logger.displayVerbose("Found n : ", n);
         auto solver = ThrottlingAlgorithm(baseJS, logger);
         string solvedN = solver.solve(n);
@@ -502,8 +503,8 @@ struct ThrottlingAlgorithm
 
     string solve(string n)
     {
-        duk_context *ctx = duk_create_heap_default();
-        if(!ctx)
+        duk_context *context = duk_create_heap_default();
+        if(!context)
         {
             logger.display("Failed to create a Duktape heap.");
             return n;
@@ -511,27 +512,28 @@ struct ThrottlingAlgorithm
 
         scope(exit)
         {
-            duk_destroy_heap(ctx);
+            duk_destroy_heap(context);
         }
 
         try
         {
-            string implementation = format!`(function() {var a="%s";%s })()`(n, findChallengeImplementation());
-            logger.displayVerbose("challenge implementation : ", implementation);
-            if(duk_peval_string(ctx, implementation.toStringz()) != 0)
+            string implementation = format!`var descramble = function(a) { %s }`(findChallengeImplementation());
+            duk_peval_string(context, implementation.toStringz());
+            duk_get_global_string(context, "descramble");
+            duk_push_string(context, n.toStringz());
+            if(duk_pcall(context, 1) != 0)
             {
-                writef("Error: %s\n", duk_safe_to_string(ctx, -1).to!string);
-                return n;
+                throw new Exception(duk_safe_to_string(context, -1).to!string);
             }
 
-            string result = duk_get_string(ctx, -1).to!string;
-            logger.display(result);
+            string result = duk_get_string(context, -1).to!string;
+            duk_pop(context);
             return result;
         }
         catch(Exception e)
         {
-            logger.display("Failed to solve N parameter, downloads might be rate limited".formatError());
             logger.display(e.message.idup.formatError());
+            logger.display("Failed to solve N parameter, downloads might be rate limited".formatError());
             return n;
         }
     }
