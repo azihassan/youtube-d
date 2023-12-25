@@ -38,6 +38,14 @@ class RegularDownloader : Downloader
             http.set(CurlOption.resume_from, destination.getSize());
         }
 
+        ulong length = url.getContentLength();
+        logger.displayVerbose("Length = ", length);
+        if(destination.exists() && destination.getSize() == length)
+        {
+            logger.display("Done !".formatSuccess());
+            return;
+        }
+
 
         auto file = File(destination, "ab");
         http.set(CurlOption.url, url);
