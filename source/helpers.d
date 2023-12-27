@@ -220,3 +220,24 @@ unittest
     assert("https://www.youtube.com/shorts/_tT2ldpZHek".parseID() == "_tT2ldpZHek");
     assert("qlsdkqsldkj".parseID() == "");
 }
+
+string parseBaseJSKey(string url)
+{
+    string id;
+    if(url.startsWith("https://"))
+    {
+        url = url["https://".length .. $];
+    }
+    if(url.startsWith("www.youtube.com"))
+    {
+        url = url["www.youtube.com".length .. $];
+    }
+    return url.split("/")[3];
+}
+
+unittest
+{
+    assert("/s/player/0c96dfd3/player_ias.vflset/ar_EG/base.js".parseBaseJSKey() == "0c96dfd3");
+    assert("https://www.youtube.com/s/player/0c96dfd3/player_ias.vflset/ar_EG/base.js".parseBaseJSKey() == "0c96dfd3");
+    assert("www.youtube.com/s/player/0c96dfd3/player_ias.vflset/ar_EG/base.js".parseBaseJSKey() == "0c96dfd3");
+}
