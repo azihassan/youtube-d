@@ -59,7 +59,7 @@ void main(string[] args)
 
     if(help.helpWanted || args.length == 1)
     {
-        defaultGetoptPrinter("Youtube downloader", help.options);
+        defaultGetoptPrinter("Youtube downloader v0.0.4", help.options);
         return;
     }
 
