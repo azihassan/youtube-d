@@ -6,7 +6,7 @@ jobs:
   unit_test:
     strategy:
       matrix:
-        os: [ { name: ubuntu-20.04, extension: '' } , { name: windows-2019, extension: '.exe' }, { name: macos-latest, extension: '']
+        os: [ { name: ubuntu-20.04, extension: '' } , { name: windows-2019, extension: '.exe' }, { name: macos-latest, extension: '' } ]
 
     runs-on: ${{ matrix.os.name }}
 
@@ -15,6 +15,13 @@ jobs:
 
     - uses: mihails-strasuns/setup-dlang@v1
       name: Install DMD
+
+    - name: Fix duktaped build on OSX
+      if: matrix.os.name == 'macos-latest'
+      run: |
+        dub upgrade
+        sed -i -e 's/version(Posix)/version(linux)/g' ~/.dub/packages/duktape/0.4.0/duktape/source/duk_config.d
+        sed -i -e 's/-linux/-posix/g' ~/.dub/packages/duktape/0.4.0/duktape/dub.json
 
     - name: Build
       run: dub build
@@ -31,7 +38,7 @@ jobs:
   console_test:
     strategy:
       matrix:
-        os: [ { name: ubuntu-20.04, command: sh tests.sh, extension: '' } , { name: windows-2019, command: powershell.exe -file tests.ps1, extension: '.exe' }, { name: macos-latest, command: sh tests.sh, extension: '' }]
+        os: [ { name: ubuntu-20.04, command: sh tests.sh, extension: '' } , { name: windows-2019, command: powershell.exe -file tests.ps1, extension: '.exe' }, { name: macos-latest, command: sh tests-macos.sh, extension: '' }]
 
     runs-on: ${{ matrix.os.name }}
     needs: unit_test

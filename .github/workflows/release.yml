@@ -27,7 +27,7 @@ jobs:
   upload_release_assets_job:
     strategy:
       matrix:
-        version: [ { os: ubuntu-20.04, suffix: x86_64, extension: '' }, { os: windows-latest, suffix: win64, extension: '.exe' }]
+        version: [ { os: ubuntu-20.04, suffix: x86_64, extension: '' }, { os: windows-latest, suffix: win64, extension: '.exe' }, { os: macos-latest, suffix: macos, extension: '' }]
 
     runs-on: ${{ matrix.version.os }}
     needs: create_release_job
@@ -38,6 +38,13 @@ jobs:
         name: Install LDC
         with:
           compiler: ldc-latest
+
+      - name: Fix duktaped build on OSX
+        if: matrix.version.suffix == 'macos'
+        run: |
+          dub upgrade
+          sed -i -e 's/version(Posix)/version(linux)/g' ~/.dub/packages/duktape/0.4.0/duktape/source/duk_config.d
+          sed -i -e 's/-linux/-posix/g' ~/.dub/packages/duktape/0.4.0/duktape/dub.json
 
       - name: Build release
         run: dub build -b release --compiler=ldc2
@@ -53,7 +60,7 @@ jobs:
           tar cavf youtube-d-${{ matrix.version.suffix }}.zip youtube-d${{ matrix.version.extension }} libcurl.dll
 
       - name: Prepare assets (Linux)
-        if: matrix.version.suffix == 'x86_64'
+        if: matrix.version.suffix == 'x86_64' || matrix.version.suffix == 'macos'
         run: |
           zip youtube-d-${{ matrix.version.suffix }}.zip youtube-d${{ matrix.version.extension }}
 
