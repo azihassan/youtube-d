@@ -16,13 +16,6 @@ jobs:
     - uses: mihails-strasuns/setup-dlang@v1
       name: Install DMD
 
-    - name: Fix duktaped build on OSX
-      if: matrix.os.name == 'macos-latest'
-      run: |
-        dub upgrade
-        sed -i -e 's/version(Posix)/version(linux)/g' ~/.dub/packages/duktape/0.4.0/duktape/source/duk_config.d
-        sed -i -e 's/-linux/-posix/g' ~/.dub/packages/duktape/0.4.0/duktape/dub.json
-
     - name: Build
       run: dub build
 
