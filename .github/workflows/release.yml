@@ -39,13 +39,6 @@ jobs:
         with:
           compiler: ldc-latest
 
-      - name: Fix duktaped build on OSX
-        if: matrix.version.suffix == 'macos'
-        run: |
-          dub upgrade
-          sed -i -e 's/version(Posix)/version(linux)/g' ~/.dub/packages/duktape/0.4.0/duktape/source/duk_config.d
-          sed -i -e 's/-linux/-posix/g' ~/.dub/packages/duktape/0.4.0/duktape/dub.json
-
       - name: Build release
         run: dub build -b release --compiler=ldc2
 
@@ -59,7 +52,7 @@ jobs:
           rm libcurl-7.68.0-WinSSL-zlib-x86-x64.zip
           tar cavf youtube-d-${{ matrix.version.suffix }}.zip youtube-d${{ matrix.version.extension }} libcurl.dll
 
-      - name: Prepare assets (Linux)
+      - name: Prepare assets (Linux or MacOS)
         if: matrix.version.suffix == 'x86_64' || matrix.version.suffix == 'macos'
         run: |
           zip youtube-d-${{ matrix.version.suffix }}.zip youtube-d${{ matrix.version.extension }}
