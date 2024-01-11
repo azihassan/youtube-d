@@ -8,6 +8,7 @@ import std.net.curl : get;
 import std.path : buildPath;
 import std.typecons : Flag, Yes, No;
 import std.string : indexOf;
+import std.regex : ctRegex, matchFirst;
 
 import helpers : StdoutLogger, parseID, parseQueryString, parseBaseJSKey;
 import parsers : parseBaseJSURL, YoutubeVideoURLExtractor, SimpleYoutubeVideoURLExtractor, AdvancedYoutubeVideoURLExtractor;
@@ -45,11 +46,7 @@ struct Cache
         updateBaseJSCache(baseJSURL, baseJSCachePath, itag);
         string baseJS = baseJSCachePath.readText();
 
-        if(html.indexOf("signatureCipher") == -1)
-        {
-            return new SimpleYoutubeVideoURLExtractor(html, baseJS, logger);
-        }
-        return new AdvancedYoutubeVideoURLExtractor(html, baseJS, logger);
+        return makeParser(html, baseJS, logger);
     }
 
     private void updateHTMLCache(string url, string htmlCachePath, int itag)
@@ -84,9 +81,7 @@ struct Cache
 
     private bool isStale(string html, int itag)
     {
-        YoutubeVideoURLExtractor shallowParser = html.indexOf("signatureCipher") == -1
-            ? new SimpleYoutubeVideoURLExtractor(html, "", logger)
-            : new AdvancedYoutubeVideoURLExtractor(html, "", logger);
+        YoutubeVideoURLExtractor shallowParser = makeParser(html, "", logger);
         ulong expire = shallowParser.findExpirationTimestamp(itag);
         return SysTime.fromUnixTime(expire) < Clock.currTime();
     }
@@ -111,6 +106,16 @@ struct Cache
         }
 
         return buildPath(cacheDirectory, cacheKey);
+    }
+
+    private YoutubeVideoURLExtractor makeParser(string html, string baseJS, StdoutLogger logger)
+    {
+        immutable urlRegex = ctRegex!`"itag":\d+,"url":"(.*?)"`;
+        if(!html.matchFirst(urlRegex).empty)
+        {
+            return new SimpleYoutubeVideoURLExtractor(html, baseJS, logger);
+        }
+        return new AdvancedYoutubeVideoURLExtractor(html, baseJS, logger);
     }
 }
 
