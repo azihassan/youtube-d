@@ -498,7 +498,7 @@ struct ThrottlingAlgorithm
     {
         string challengeName = findChallengeName();
         logger.displayVerbose("challenge name : ", challengeName);
-        return javascript.matchOrFail(challengeName ~ `=function\(a\)\{((.|\s)+?)\};`).strip();
+        return javascript.matchOrFail(challengeName ~ `=function\(a\)\{((.|\s)+?)return b\.join\(""\)\};`).strip();
     }
 
     string solve(string n)
@@ -506,7 +506,7 @@ struct ThrottlingAlgorithm
         duk_context *context = duk_create_heap_default();
         if(!context)
         {
-            logger.display("Failed to create a Duktape heap.");
+            logger.display("Failed to create a Duktape heap.".formatError());
             return n;
         }
 
@@ -517,7 +517,9 @@ struct ThrottlingAlgorithm
 
         try
         {
-            string implementation = format!`var descramble = function(a) { %s }`(findChallengeImplementation());
+            string implementation = format!`var descramble = function(a) { %s return b.join("")};`(findChallengeImplementation());
+            logger.displayVerbose("Challenge implementation :");
+            logger.displayVerbose(implementation);
             duk_peval_string(context, implementation.toStringz());
             duk_get_global_string(context, "descramble");
             duk_push_string(context, n.toStringz());
@@ -547,6 +549,18 @@ unittest
 
     string expected = "BXfVEoYTXMkKsg";
     string actual = algorithm.solve("TVXfDeJvgqqwQZo");
+
+    assert(expected == actual, expected ~ " != " ~ actual);
+}
+
+unittest
+{
+    writeln("Should parse new challenge");
+    auto algorithm = ThrottlingAlgorithm("717a6f94.js".readText(), new StdoutLogger());
+    assert(algorithm.findChallengeName() == "bma", algorithm.findChallengeName() ~ " != bma");
+
+    string expected = "vDwB7sNN_ZK_8w";
+    string actual = algorithm.solve("kVFjC9ssz1cOv88r");
 
     assert(expected == actual, expected ~ " != " ~ actual);
 }
