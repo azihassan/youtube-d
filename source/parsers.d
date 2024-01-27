@@ -518,8 +518,6 @@ struct ThrottlingAlgorithm
         try
         {
             string implementation = format!`var descramble = function(a) { %s return b.join("")};`(findChallengeImplementation());
-            logger.displayVerbose("Challenge implementation :");
-            logger.displayVerbose(implementation);
             duk_peval_string(context, implementation.toStringz());
             duk_get_global_string(context, "descramble");
             duk_push_string(context, n.toStringz());
