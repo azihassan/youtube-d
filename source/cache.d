@@ -4,11 +4,12 @@ import std.base64 : Base64URL;
 import std.conv : to;
 import std.datetime : SysTime, Clock, days;
 import std.file : exists, getcwd, readText, remove, tempDir, write;
-import std.net.curl : get;
+import std.net.curl : Curl, CurlOption;
 import std.path : buildPath;
 import std.typecons : Flag, Yes, No;
 import std.string : indexOf;
 import std.regex : ctRegex, matchFirst;
+import std.algorithm : map;
 
 import helpers : StdoutLogger, parseID, parseQueryString, parseBaseJSKey;
 import parsers : parseBaseJSURL, YoutubeVideoURLExtractor, SimpleYoutubeVideoURLExtractor, AdvancedYoutubeVideoURLExtractor;
@@ -23,9 +24,30 @@ struct Cache
     this(StdoutLogger logger, Flag!"forceRefresh" forceRefresh = No.forceRefresh)
     {
         this.logger = logger;
-        downloadAsString = (string url) => url.get().idup;
         this.forceRefresh = forceRefresh;
         cacheDirectory = tempDir();
+
+        downloadAsString = (string url) {
+            string result;
+            Curl curl;
+            curl.initialize();
+            curl.set(CurlOption.url, url);
+            curl.set(CurlOption.encoding, "deflate, gzip");
+
+            curl.onReceive = (ubyte[] chunk) {
+                result ~= chunk.map!(to!(const(char))).to!string;
+                return chunk.length;
+            };
+
+            curl.onReceiveHeader = (in char[] header) {
+                if(header.indexOf("Content-Length", No.caseSensitive) == 0)
+                {
+                    logger.displayVerbose("Length of " ~ url ~ " : " ~ header["Content-Length: ".length .. $]);
+                }
+            };
+            curl.perform();
+            return result;
+        };
     }
 
     this(StdoutLogger logger, string delegate(string url) downloadAsString, Flag!"forceRefresh" forceRefresh = No.forceRefresh)
