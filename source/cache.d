@@ -33,6 +33,7 @@ struct Cache
             curl.initialize();
             curl.set(CurlOption.url, url);
             curl.set(CurlOption.encoding, "deflate, gzip");
+            curl.set(CurlOption.followlocation, true);
 
             curl.onReceive = (ubyte[] chunk) {
                 result ~= chunk.map!(to!(const(char))).to!string;
