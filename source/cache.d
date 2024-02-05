@@ -151,10 +151,10 @@ unittest
         {
             downloadAttempted = true;
         }
-        return "zoz.html".readText();
+        return "tests/zoz.html".readText();
     };
     auto cache = Cache(new StdoutLogger(), downloadAsString);
-    cache.cacheDirectory = getcwd();
+    cache.cacheDirectory = buildPath(getcwd(), "tests");
 
     auto parser = cache.makeParser("https://youtu.be/zoz", 18);
     assert(downloadAttempted);
@@ -169,13 +169,13 @@ unittest
         {
             downloadAttempted = true;
         }
-        return "zoz.html".readText();
+        return "tests/zoz.html".readText();
     };
     SysTime tomorrow = Clock.currTime() + 1.days;
     auto cache = Cache(new StdoutLogger(), downloadAsString);
-    cache.cacheDirectory = getcwd();
+    cache.cacheDirectory = buildPath(getcwd(), "tests");
 
-    "zoz-fresh.html".write("zoz.html".readText().dup.replace("expire=1638935038", "expire=" ~ tomorrow.toUnixTime().to!string));
+    "tests/zoz-fresh.html".write("tests/zoz.html".readText().dup.replace("expire=1638935038", "expire=" ~ tomorrow.toUnixTime().to!string));
 
     auto parser = cache.makeParser("https://youtu.be/zoz-fresh", 18);
     assert(!downloadAttempted);
@@ -190,10 +190,10 @@ unittest
         {
             downloadAttempted = true;
         }
-        return "dQw4w9WgXcQ.html".readText();
+        return "tests/dQw4w9WgXcQ.html".readText();
     };
     auto cache = Cache(new StdoutLogger(), downloadAsString);
-    cache.cacheDirectory = getcwd();
+    cache.cacheDirectory = buildPath(getcwd(), "tests");
 
     auto parser = cache.makeParser("https://youtu.be/dQw4w9WgXcQ", 18);
     assert(downloadAttempted);
@@ -208,15 +208,15 @@ unittest
         {
             downloadAttempted = true;
         }
-        return "dQw4w9WgXcQ-fresh.html".readText();
+        return "tests/dQw4w9WgXcQ-fresh.html".readText();
     };
     SysTime tomorrow = Clock.currTime() + 1.days;
     auto cache = Cache(new StdoutLogger(), downloadAsString);
-    cache.cacheDirectory = getcwd();
+    cache.cacheDirectory = buildPath(getcwd(), "tests");
 
     //mock previously cached and fresh files
-    "dQw4w9WgXcQ-fresh.html".write(
-            "dQw4w9WgXcQ.html".readText().dup.replace("expire%3D1677997809", "expire%3D" ~ tomorrow.toUnixTime().to!string)
+    "tests/dQw4w9WgXcQ-fresh.html".write(
+            "tests/dQw4w9WgXcQ.html".readText().dup.replace("expire%3D1677997809", "expire%3D" ~ tomorrow.toUnixTime().to!string)
     );
 
 
@@ -239,10 +239,10 @@ unittest
         {
             baseJSDownloadAttempted = true;
         }
-        return "zoz.html".readText();
+        return "tests/zoz.html".readText();
     };
     auto cache = Cache(new StdoutLogger(), downloadAsString, Yes.forceRefresh);
-    cache.cacheDirectory = getcwd();
+    cache.cacheDirectory = buildPath(getcwd(), "tests");
 
     auto parser = cache.makeParser("https://youtu.be/zoz", 18);
     assert(downloadAttempted);
@@ -252,19 +252,19 @@ unittest
 unittest
 {
     writeln("When base.js is cached, should read from cache");
-    "0c96dfd3.js".write("base.min.js".readText());
+    "tests/0c96dfd3.js".write("tests/base.min.js".readText());
 
     bool baseJSDownloadAttempted;
     auto downloadAsString = delegate string(string url) {
         if(url == "https://www.youtube.com/s/player/0c96dfd3/player_ias.vflset/ar_EG/base.js")
         {
             baseJSDownloadAttempted = true;
-            return "0c96dfd3.js".readText();
+            return "tests/0c96dfd3.js".readText();
         }
-        return "zoz.html".readText();
+        return "tests/zoz.html".readText();
     };
     auto cache = Cache(new StdoutLogger(), downloadAsString);
-    cache.cacheDirectory = getcwd();
+    cache.cacheDirectory = buildPath(getcwd(), "tests");
 
     auto parser = cache.makeParser("https://youtu.be/zoz", 18);
     assert(!baseJSDownloadAttempted);
@@ -273,13 +273,13 @@ unittest
 unittest
 {
     writeln("When base.js is not cached, should download it");
-    if("0c96dfd3.js".exists())
+    if("tests/0c96dfd3.js".exists())
     {
-        "0c96dfd3.js".remove();
+        "tests/0c96dfd3.js".remove();
     }
     scope(exit)
     {
-        "0c96dfd3.js".remove();
+        "tests/0c96dfd3.js".remove();
     }
 
     bool baseJSDownloadAttempted;
@@ -287,12 +287,12 @@ unittest
         if(url == "https://www.youtube.com/s/player/0c96dfd3/player_ias.vflset/ar_EG/base.js")
         {
             baseJSDownloadAttempted = true;
-            return "base.min.js".readText();
+            return "tests/base.min.js".readText();
         }
-        return "zoz.html".readText();
+        return "tests/zoz.html".readText();
     };
     auto cache = Cache(new StdoutLogger(), downloadAsString);
-    cache.cacheDirectory = getcwd();
+    cache.cacheDirectory = buildPath(getcwd(), "tests");
 
     auto parser = cache.makeParser("https://youtu.be/zoz", 18);
     assert(baseJSDownloadAttempted);

@@ -128,13 +128,13 @@ version(unittest)
 unittest
 {
     writeln("Should log verbose output in verbose mode");
-    auto logs = File("logs.txt", "w");
+    auto logs = File("tests/logs.txt", "w");
     auto logger = new StdoutLogger(true, logs);
     logger.displayVerbose("should log this verbose message");
     logger.display("should log this message");
     logs.flush();
 
-    assert("logs.txt".readText().strip().splitLines() == [
+    assert("tests/logs.txt".readText().strip().splitLines() == [
             "should log this verbose message",
             "should log this message"
     ]);
@@ -143,13 +143,13 @@ unittest
 unittest
 {
     writeln("Should skip verbose output in non verbose mode");
-    auto logs = File("logs.txt", "w");
+    auto logs = File("tests/logs.txt", "w");
     auto logger = new StdoutLogger(false, logs);
     logger.displayVerbose("should skip this verbose message");
     logger.display("should log this message");
     logs.flush();
 
-    assert("logs.txt".readText().splitLines() == [
+    assert("tests/logs.txt".readText().splitLines() == [
             "should log this message"
     ]);
 }
