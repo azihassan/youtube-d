@@ -1,7 +1,7 @@
 set -e
 chmod +x youtube-d
 
-./youtube-d -p -d --no-progress https://www.youtube.com/watch?v=R85MK830mMo
+./youtube-d -p --no-progress https://www.youtube.com/watch?v=R85MK830mMo
 
 filename="Debugging Github actions-R85MK830mMo-18.mp4"
 if [ ! -e "$filename" ]; then
