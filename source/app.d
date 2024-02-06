@@ -37,7 +37,7 @@ void main(string[] args)
     bool verbose;
     bool noProgress;
     bool noCache;
-    bool dethrottle;
+    bool dethrottle = true;
 
     version(linux)
     {
@@ -54,7 +54,7 @@ void main(string[] args)
         "v|verbose", "Display debugging messages", &verbose,
         "no-progress", "Don't display real-time progress", &noProgress,
         "no-cache", "Skip caching of HTML and base.js", &noCache,
-        "d|dethrottle", "Attempt to dethrottle download speed by solving the N challenge", &dethrottle,
+        "no-dethrottle", "Skip N-challenge dethrottling attempt", () { dethrottle = false; }
     );
 
     if(help.helpWanted || args.length == 1)
@@ -109,6 +109,7 @@ void handleURL(string url, int itag, StdoutLogger logger, bool displayFormats, b
     logger.display(formatTitle("Handling " ~ url));
     YoutubeVideoURLExtractor parser = Cache(logger, noCache ? Yes.forceRefresh : No.forceRefresh).makeParser(url, itag);
     logger.displayVerbose("Downloaded video HTML");
+    logger.displayVerbose("Attempt to dethrottle : " ~ (dethrottle ? "Yes" : "No"));
 
     if(displayFormats)
     {
