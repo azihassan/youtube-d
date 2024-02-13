@@ -54,7 +54,8 @@ void main(string[] args)
         "v|verbose", "Display debugging messages", &verbose,
         "no-progress", "Don't display real-time progress", &noProgress,
         "no-cache", "Skip caching of HTML and base.js", &noCache,
-        "no-dethrottle", "Skip N-challenge dethrottling attempt", () { dethrottle = false; }
+        "d|dethrottle", "Attempt to dethrottle download speed by solving the N challenge (defaults to true)", &dethrottle,
+        "no-dethrottle", "Skip N-challenge dethrottling attempt", () { dethrottle = false; },
     );
 
     if(help.helpWanted || args.length == 1)
