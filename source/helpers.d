@@ -92,7 +92,7 @@ string matchOrFail(Captures!string match, string pattern = "")
 
 class StdoutLogger : Logger
 {
-    private bool verbose;
+    bool verbose;
     private File stream;
 
     this(bool verbose = false, File stream = stdout) @safe
