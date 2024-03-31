@@ -5,7 +5,7 @@ import std.conv : to;
 import std.string : startsWith, indexOf, format, split;
 import std.file : append, exists, read, remove, getSize;
 import std.range : iota;
-import std.net.curl : Curl, CurlOption;
+import std.net.curl : Curl, CurlOption, HTTP;
 import helpers : getContentLength, sanitizePath, StdoutLogger, formatSuccess, formatTitle;
 
 import parsers : YoutubeFormat;
@@ -30,14 +30,22 @@ class RegularDownloader : Downloader
 
     public void download(string destination, string url, string referer)
     {
-        auto http = Curl();
-        http.initialize();
+        auto http = HTTP(url);
+
         if(destination.exists)
         {
-            logger.display("Resuming from byte ", destination.getSize());
-            http.set(CurlOption.resume_from, destination.getSize());
+            ulong offset = destination.getSize();
+            http.handle().set(CurlOption.resume_from, offset);
+            logger.display("Resuming from byte ", offset);
+        }
+        else
+        {
+            http.addRequestHeader("Range", "bytes=0-");
+            logger.display("Downloading from byte 0");
         }
 
+        http.verbose(logger.verbose);
+        auto curl = http.handle();
         ulong length = url.getContentLength();
         logger.displayVerbose("Length = ", length);
         if(destination.exists() && destination.getSize() == length)
@@ -46,32 +54,78 @@ class RegularDownloader : Downloader
             return;
         }
 
-
         auto file = File(destination, "ab");
-        http.set(CurlOption.url, url);
-        http.set(CurlOption.useragent, "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:95.0) Gecko/20100101 Firefox/95.0");
-        http.set(CurlOption.referer, referer);
-        http.set(CurlOption.followlocation, true);
-        http.set(CurlOption.failonerror, true);
-        http.set(CurlOption.connecttimeout, 60 * 3);
-        http.set(CurlOption.nosignal, true);
+        curl.set(CurlOption.url, url);
+        curl.set(CurlOption.useragent, "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:95.0) Gecko/20100101 Firefox/95.0");
+        curl.set(CurlOption.referer, referer);
+        curl.set(CurlOption.followlocation, true);
+        curl.set(CurlOption.failonerror, true);
+        curl.set(CurlOption.connecttimeout, 60 * 3);
+        curl.set(CurlOption.nosignal, true);
 
-        http.onReceiveHeader = (in char[]  header) {
-            logger.displayVerbose(header);
-        };
-
-        http.onReceive = (ubyte[] data) {
+        curl.onReceive = (ubyte[] data) {
             file.rawWrite(data);
             return data.length;
         };
 
         if(progress)
         {
-            http.onProgress = (size_t total, size_t current, size_t _, size_t __) {
+            curl.onProgress = (size_t total, size_t current, size_t _, size_t __) {
                 return onProgress(total, current);
             };
         }
-        auto result = http.perform();
+        auto result = curl.perform();
+    }
+}
+
+unittest
+{
+    import std.socket : Socket, TcpSocket, InternetAddress, SocketShutdown;
+    import std.parallelism : task;
+    import std.file : readText;
+
+    writeln("Should include range header for new downloads");
+    auto server = new TcpSocket();
+    scope(exit)
+    {
+        server.shutdown(SocketShutdown.BOTH);
+        server.close();
+        "destination.mp4".exists() && "destination.mp4".remove();
+    }
+    server.bind(new InternetAddress("127.0.0.1", 1234));
+    server.blocking = true;
+    server.listen(1);
+
+    task!(() {
+        new RegularDownloader(new StdoutLogger(), (ulong length, ulong currentLength) { return 0; }).download(
+                "destination.mp4",
+                "http://127.0.0.1:1234/destination.mp4",
+                "Random referer"
+        );
+    }).executeInNewThread();
+
+    writeln("Awaiting connections...");
+    auto client = server.accept();
+    scope(exit) client.close();
+
+    writeln("Client connected");
+    auto rawRequest = new ubyte[8 * 1024]; //8 kb for good measure
+    auto contentLength = client.receive(rawRequest);
+    assert(contentLength != Socket.ERROR);
+
+    string request = cast(string) rawRequest[0 .. contentLength];
+    string response = "HTTP/1.1 200 OK\nContent-Length: 2\r\nContent-Type: video/mp4\r\n\r\nOK";
+
+    //video length request, skipping checks
+    if(request.startsWith("HEAD"))
+    {
+        assert(Socket.ERROR != client.send(response));
+    }
+    else
+    {
+        assert(request.indexOf("Range: bytes=0-") != 0);
+        assert(Socket.ERROR != client.send(response));
+        assert("destination.mp4".exists() && "destination.mp4".readText() == "OK");
     }
 }
 
