@@ -7,11 +7,13 @@ import std.net.curl : HTTP;
 import std.string : split, indexOf, startsWith;
 import std.format : formattedRead;
 
+immutable string USER_AGENT = "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:95.0) Gecko/20100101 Firefox/95.0";
+
 ulong getContentLength(string url)
 {
     auto http = HTTP(url);
     http.method = HTTP.Method.head;
-    http.addRequestHeader("User-Agent", "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:95.0) Gecko/20100101 Firefox/95.0");
+    http.addRequestHeader("User-Agent", USER_AGENT);
     http.perform();
     if(http.statusLine.code >= 400)
     {
