@@ -13,8 +13,10 @@ jobs:
     steps:
     - uses: actions/checkout@v1
 
-    - uses: mihails-strasuns/setup-dlang@v1
-      name: Install DMD
+    - uses: dlang-community/setup-dlang@v1
+      name: Install LDC
+      with:
+        compiler: ldc-latest
 
     - name: Build
       run: dub build
