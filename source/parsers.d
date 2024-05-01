@@ -56,8 +56,12 @@ abstract class YoutubeVideoURLExtractor
 
     private YoutubeFormat[] getFormats(string formatKey)
     {
-        auto streamingData = html.matchOrFail!`"streamingData":(.*?),"player`;
+        string streamingData = html.matchOrFail!`"streamingData":(.*?),"player`;
         auto json = streamingData.parseJSON();
+        if(formatKey !in json)
+        {
+            return [];
+        }
         YoutubeFormat[] formats;
         foreach(format; json[formatKey].array)
         {
@@ -334,6 +338,10 @@ unittest
     assert(formats[20] == YoutubeFormat(249, 1232413, "tiny", `audio/webm; codecs="opus"`, [AudioVisual.AUDIO]));
     assert(formats[21] == YoutubeFormat(250, 1630086, "tiny", `audio/webm; codecs="opus"`, [AudioVisual.AUDIO]));
     assert(formats[22] == YoutubeFormat(251, 3437753, "tiny", `audio/webm; codecs="opus"`, [AudioVisual.AUDIO]));
+
+    html = readText("tests/dQ-adaptiveFormats-only.html");
+    extractor = new AdvancedYoutubeVideoURLExtractor(html, "", new StdoutLogger());
+    assert(!extractor.getFormats().canFind!(f => f.itag == 18));
 }
 
 
