@@ -38,6 +38,7 @@ void main(string[] args)
     bool noProgress;
     bool noCache;
     bool dethrottle = true;
+    bool chunked;
 
     version(linux)
     {
@@ -51,6 +52,7 @@ void main(string[] args)
         "F", "List available formats", &displayFormats,
         "o|output-url", "Display extracted video URL without downloading it", &outputURL,
         "p|parallel", "Download in 4 parallel connections", &parallel,
+        "c|chunked", "Download in multiple serial chunks (experimental)", &chunked,
         "v|verbose", "Display debugging messages", &verbose,
         "no-progress", "Don't display real-time progress", &noProgress,
         "no-cache", "Skip caching of HTML and base.js", &noCache,
@@ -85,7 +87,8 @@ void main(string[] args)
                     parallel,
                     noProgress,
                     retry > 0 ? true : noCache, //force cache refresh on failure,
-                    dethrottle
+                    dethrottle,
+                    chunked
                 );
                 break;
             }
@@ -105,7 +108,7 @@ void main(string[] args)
     }
 }
 
-void handleURL(string url, int itag, StdoutLogger logger, bool displayFormats, bool outputURL, bool parallel, bool noProgress, bool noCache, bool dethrottle)
+void handleURL(string url, int itag, StdoutLogger logger, bool displayFormats, bool outputURL, bool parallel, bool noProgress, bool noCache, bool dethrottle, bool chunked)
 {
     logger.display(formatTitle("Handling " ~ url));
     YoutubeVideoURLExtractor parser = Cache(logger, noCache ? Yes.forceRefresh : No.forceRefresh).makeParser(url, itag);
@@ -149,6 +152,12 @@ void handleURL(string url, int itag, StdoutLogger logger, bool displayFormats, b
     {
         logger.display("Using ParallelDownloader");
         downloader = new ParallelDownloader(logger, parser.getID(), parser.getTitle(), youtubeFormat, !noProgress);
+    }
+    else if(chunked)
+    {
+        logger.display("Using ChunkedDownloader");
+        logger.display("Warning: ChunkedDownloader is experimental".formatWarning());
+        downloader = new ChunkedDownloader(logger, parser.getID(), parser.getTitle(), youtubeFormat, !noProgress);
     }
     else
     {
