@@ -1,11 +1,12 @@
 import std.stdio : writef, writeln, File;
-import std.parallelism : parallel;
-import std.algorithm : each, sort, sum, map;
+import std.parallelism : defaultPoolThreads, taskPool, totalCPUs;
+import std.algorithm : each, sort, sum, map, min;
 import std.conv : to;
 import std.string : startsWith, indexOf, format, split;
 import std.file : append, exists, read, remove, getSize;
 import std.range : iota;
 import std.net.curl : Curl, CurlOption, HTTP;
+import std.math : ceil;
 import helpers : getContentLength, sanitizePath, StdoutLogger, formatSuccess, formatTitle;
 
 import parsers : YoutubeFormat;
@@ -137,6 +138,13 @@ class ParallelDownloader : Downloader
     private YoutubeFormat youtubeFormat;
     private bool progress;
 
+    //open at most this many simultaneous connections to the youtube servers
+    public int threadCount;
+
+    //request range length limit above which youtube starts throttling downloads
+    //https://github.com/azihassan/youtube-d/issues/65#issuecomment-2094993192
+    public immutable LENGTH_THROTTLING_LIMIT = 10.0 * 1024.0 * 1024.0;
+
     this(StdoutLogger logger, string id, string title, YoutubeFormat youtubeFormat, bool progress = true)
     {
         this.id = id;
@@ -144,6 +152,7 @@ class ParallelDownloader : Downloader
         this.logger = logger;
         this.youtubeFormat = youtubeFormat;
         this.progress = progress;
+        this.threadCount = min(totalCPUs, 4);
     }
 
     public void download(string destination, string url, string referer)
@@ -156,9 +165,15 @@ class ParallelDownloader : Downloader
             return;
         }
 
-        int chunks = 4;
+        int chunks = cast(int) ceil(cast(double) length / LENGTH_THROTTLING_LIMIT);
+        logger.displayVerbose(format!"Downloading %d chunks of %.2f MBs each across %d threads"(
+            chunks,
+            length / chunks / 1024.0 / 1024.0,
+            threadCount
+        ));
         string[] destinations = new string[chunks];
-        foreach(i, e; iota(0, chunks).parallel)
+        defaultPoolThreads = threadCount;
+        foreach(i, e; taskPool.parallel(iota(0, chunks)))
         {
             ulong[] offsets = calculateOffset(length, chunks, i);
             string partialLink = format!"%s&range=%d-%d"(url, offsets[0], offsets[1]);
@@ -240,3 +255,16 @@ class ParallelDownloader : Downloader
         assert([15 + 1, 23] == downloader.calculateOffset(length, 4, 3));
     }
 }
+
+//experimental single-threaded parallel downloader for RegularDownloader doesn't cut it
+//bypasses adaptive format rate limiting, but introduces a chunk concatenation step
+//provided for convenience
+class ChunkedDownloader : ParallelDownloader
+{
+    this(StdoutLogger logger, string id, string title, YoutubeFormat youtubeFormat, bool progress = true)
+    {
+        super(logger, id, title, youtubeFormat, progress);
+        this.threadCount = 0;
+    }
+}
+
