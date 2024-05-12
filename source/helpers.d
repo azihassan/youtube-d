@@ -83,7 +83,7 @@ string matchOrFail(Captures!string match)
 {
     if(match.empty)
     {
-        throw new Exception("Failed to parse encryption steps");
+        throw new Exception("Failed to match regular expression");
     }
     return match[1];
 }
@@ -163,6 +163,18 @@ string formatSuccess(string input)
     else
     {
         return "\033[0;32m" ~ input ~ "\033[0m";
+    }
+}
+
+string formatWarning(string input)
+{
+    version(Windows)
+    {
+        return input;
+    }
+    else
+    {
+        return "\033[0;33m" ~ input ~ "\033[0m";
     }
 }
 

@@ -7,10 +7,11 @@ import std.conv : to;
 import std.array : replace;
 import std.file : readText;
 import std.string : indexOf, format, lastIndexOf, split, strip, toStringz, startsWith;
+import std.regex : ctRegex, matchFirst;
 import std.algorithm : canFind, filter, reverse, map;
 import std.format : formattedRead;
 
-import helpers : parseQueryString, matchOrFail, StdoutLogger, formatError;
+import helpers : parseQueryString, matchOrFail, StdoutLogger, formatError, formatWarning;
 
 import html;
 import duktape;
@@ -19,9 +20,24 @@ abstract class YoutubeVideoURLExtractor
 {
     protected string html;
     protected Document parser;
+    protected StdoutLogger logger;
 
     abstract public string getURL(int itag, bool attemptDethrottle = false);
     abstract public ulong findExpirationTimestamp(int itag);
+
+    public void failIfUnplayable()
+    {
+        auto playabilityStatus = html.matchFirst(ctRegex!`"playabilityStatus":\{"status":"(.*?)",`);
+        if(playabilityStatus.empty)
+        {
+            logger.display("Warning: playability status could not be parsed".formatWarning);
+            return;
+        }
+        if(playabilityStatus[1] != "OK")
+        {
+            throw new Exception("Video is unplayable because of status " ~ playabilityStatus[1]);
+        }
+    }
 
     public string getTitle()
     {
@@ -98,12 +114,12 @@ abstract class YoutubeVideoURLExtractor
 class SimpleYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
 {
     private string baseJS;
-    private StdoutLogger logger;
     this(string html, StdoutLogger logger)
     {
         this.html = html;
         this.logger = logger;
         parser = createDocument(html);
+        failIfUnplayable();
     }
 
     this(string html, string baseJS, StdoutLogger logger)
@@ -162,6 +178,16 @@ unittest
     auto extractor = new SimpleYoutubeVideoURLExtractor(html, new StdoutLogger());
 
     assert(extractor.getID() == "Q_-p2q5FHy0");
+}
+
+unittest
+{
+    import std.exception : collectExceptionMsg;
+    writeln("Should gracefully fail for unplayable videos");
+    string html = readText("tests/fgDQyFeBBIo.html");
+    string exceptionMessage = collectExceptionMsg(new SimpleYoutubeVideoURLExtractor(html, new StdoutLogger()));
+    string expectedExceptionMessage = "Video is unplayable because of status LOGIN_REQUIRED";
+    assert(exceptionMessage == expectedExceptionMessage, "Expected message " ~ expectedExceptionMessage ~ " but got " ~ exceptionMessage);
 }
 
 enum AudioVisual : string
@@ -242,7 +268,6 @@ unittest
 class AdvancedYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
 {
     private string baseJS;
-    private StdoutLogger logger;
 
     this(string html, string baseJS, StdoutLogger logger)
     {
@@ -250,6 +275,7 @@ class AdvancedYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
         this.parser = createDocument(html);
         this.baseJS = baseJS;
         this.logger = logger;
+        failIfUnplayable();
     }
 
     override string getURL(int itag, bool attemptDethrottle = false)
