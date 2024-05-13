@@ -11,7 +11,7 @@ import std.string : indexOf;
 import std.regex : ctRegex, matchFirst;
 import std.algorithm : map;
 
-import helpers : StdoutLogger, parseID, parseQueryString, parseBaseJSKey;
+import helpers : StdoutLogger, parseID, parseQueryString, parseBaseJSKey, USER_AGENT;
 import parsers : parseBaseJSURL, YoutubeVideoURLExtractor, SimpleYoutubeVideoURLExtractor, AdvancedYoutubeVideoURLExtractor;
 
 struct Cache
@@ -20,6 +20,7 @@ struct Cache
     private string delegate(string url) downloadAsString;
     private Flag!"forceRefresh" forceRefresh;
     string cacheDirectory;
+    string proxy;
 
     this(StdoutLogger logger, Flag!"forceRefresh" forceRefresh = No.forceRefresh)
     {
@@ -32,8 +33,14 @@ struct Cache
             Curl curl;
             curl.initialize();
             curl.set(CurlOption.url, url);
+            curl.set(CurlOption.useragent, USER_AGENT);
             curl.set(CurlOption.encoding, "deflate, gzip");
             curl.set(CurlOption.followlocation, true);
+            curl.set(CurlOption.followlocation, true);
+            if(proxy)
+            {
+                curl.set(CurlOption.proxy, proxy);
+            }
 
             curl.onReceive = (ubyte[] chunk) {
                 result ~= chunk.map!(to!(const(char))).to!string;

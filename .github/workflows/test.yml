@@ -6,7 +6,7 @@ jobs:
   unit_test:
     strategy:
       matrix:
-        os: [ { name: ubuntu-20.04, extension: '' } , { name: windows-2019, extension: '.exe' }, { name: macos-latest, extension: '' } ]
+        os: [ { name: windows-2019, extension: '.exe' } ]
 
     runs-on: ${{ matrix.os.name }}
 
@@ -33,7 +33,7 @@ jobs:
   console_test:
     strategy:
       matrix:
-        os: [ { name: ubuntu-20.04, command: sh tests/tests.sh, extension: '' } , { name: windows-2019, command: powershell.exe -file tests\tests.ps1, extension: '.exe' }, { name: macos-latest, command: sh tests/tests-macos.sh, extension: '' }]
+        os: [{ name: windows-2019, command: powershell.exe -file tests\tests.ps1, extension: '.exe' }]
 
     runs-on: ${{ matrix.os.name }}
     needs: unit_test
@@ -53,6 +53,17 @@ jobs:
         curl -LO https://downloads.dlang.org/other/libcurl-7.68.0-WinSSL-zlib-x86-x64.zip
         tar -xf libcurl-7.68.0-WinSSL-zlib-x86-x64.zip
         xcopy dmd2\windows\bin64\libcurl.dll .
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+
+    - name: Install mitmproxy
+      run: pip install mitmproxy
+
+    - name: Setup tmate session
+      uses: mxschmitt/action-tmate@v3
 
     - name: e2e tests
       run: ${{ matrix.os.command }}

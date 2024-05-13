@@ -6,13 +6,14 @@ import std.string : startsWith, indexOf, format, split;
 import std.file : append, exists, read, remove, getSize;
 import std.range : iota;
 import std.net.curl : Curl, CurlOption;
-import helpers : getContentLength, sanitizePath, StdoutLogger, formatSuccess;
+import helpers : getContentLength, sanitizePath, StdoutLogger, formatSuccess, USER_AGENT;
 
 import parsers : YoutubeFormat;
 
 interface Downloader
 {
     void download(string destination, string url, string referer);
+    Downloader setProxy(string proxy);
 }
 
 class RegularDownloader : Downloader
@@ -20,12 +21,19 @@ class RegularDownloader : Downloader
     private StdoutLogger logger;
     private int delegate(ulong length, ulong currentLength) onProgress;
     private bool progress;
+    private string proxy;
 
     this(StdoutLogger logger, int delegate(ulong length, ulong currentLength) onProgress, bool progress = true)
     {
         this.logger = logger;
         this.onProgress = onProgress;
         this.progress = progress;
+    }
+
+    public Downloader setProxy(string proxy)
+    {
+        this.proxy = proxy;
+        return this;
     }
 
     public void download(string destination, string url, string referer)
@@ -49,12 +57,16 @@ class RegularDownloader : Downloader
 
         auto file = File(destination, "ab");
         http.set(CurlOption.url, url);
-        http.set(CurlOption.useragent, "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:95.0) Gecko/20100101 Firefox/95.0");
+        http.set(CurlOption.useragent, USER_AGENT);
         http.set(CurlOption.referer, referer);
         http.set(CurlOption.followlocation, true);
         http.set(CurlOption.failonerror, true);
         http.set(CurlOption.connecttimeout, 60 * 3);
         http.set(CurlOption.nosignal, true);
+        if(proxy != "")
+        {
+            http.set(CurlOption.proxy, proxy);
+        }
 
         http.onReceiveHeader = (in char[]  header) {
             logger.displayVerbose(header);
@@ -82,6 +94,7 @@ class ParallelDownloader : Downloader
     private string title;
     private YoutubeFormat youtubeFormat;
     private bool progress;
+    private string proxy;
 
     this(StdoutLogger logger, string id, string title, YoutubeFormat youtubeFormat, bool progress = true)
     {
@@ -91,6 +104,13 @@ class ParallelDownloader : Downloader
         this.youtubeFormat = youtubeFormat;
         this.progress = progress;
     }
+
+    public Downloader setProxy(string proxy)
+    {
+        this.proxy = proxy;
+        return this;
+    }
+
 
     public void download(string destination, string url, string referer)
     {
@@ -118,7 +138,7 @@ class ParallelDownloader : Downloader
                 logger.displayVerbose(partialDestination, " already has ", partialDestination.getSize(), " bytes, skipping");
                 continue;
             }
-            new RegularDownloader(logger, (ulong _, ulong __) {
+            auto downloader = new RegularDownloader(logger, (ulong _, ulong __) {
                 if(length == 0)
                 {
                     return 0;
@@ -127,7 +147,9 @@ class ParallelDownloader : Downloader
                 auto percentage = 100.0 * (cast(float)(current) / length);
                 writef!"\r[%.2f %%] %.2f / %.2f MB"(percentage, current / 1024.0 / 1024.0, length / 1024.0 / 1024.0);
                 return 0;
-            }, progress).download(partialDestination, partialLink, url);
+            }, progress);
+            downloader.proxy = proxy;
+            downloader.download(partialDestination, partialLink, url);
         }
 
         writeln();

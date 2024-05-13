@@ -1,4 +1,19 @@
-& ".\youtube-d.exe" -p --no-progress https://www.youtube.com/watch?v=R85MK830mMo
+Start-Job { mitmdump -q -w proxydump }
+
+Write-Host "Launching proxy..."
+sleep 2
+Write-Host "Proxy running"
+
+Write-Host "Installing certificate..."
+curl.exe -vLo mitmproxy-ca-cert.cer --proxy http://localhost:8080 http://mitm.it/cert/cer
+dir *.cer
+
+Import-Certificate -FilePath .\mitmproxy-ca-cert.cer -CertStoreLocation Cert:\LocalMachine\Root
+certlm
+
+Write-Host "Certificate installed"
+
+& ".\youtube-d.exe" -p --no-progress --proxy http://localhost:8080 https://www.youtube.com/watch?v=R85MK830mMo
 
 $filename = "Debugging Github actions-R85MK830mMo-18.mp4"
 

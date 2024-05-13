@@ -38,6 +38,7 @@ void main(string[] args)
     bool noProgress;
     bool noCache;
     bool dethrottle = true;
+    string proxy;
 
     version(linux)
     {
@@ -56,6 +57,7 @@ void main(string[] args)
         "no-cache", "Skip caching of HTML and base.js", &noCache,
         "d|dethrottle", "Attempt to dethrottle download speed by solving the N challenge (defaults to true)", &dethrottle,
         "no-dethrottle", "Skip N-challenge dethrottling attempt", () { dethrottle = false; },
+        "proxy", "Specifies a proxy in the type://host:port format", &proxy
     );
 
     if(help.helpWanted || args.length == 1)
@@ -85,7 +87,8 @@ void main(string[] args)
                     parallel,
                     noProgress,
                     retry > 0 ? true : noCache, //force cache refresh on failure,
-                    dethrottle
+                    dethrottle,
+                    proxy
                 );
                 break;
             }
@@ -105,10 +108,12 @@ void main(string[] args)
     }
 }
 
-void handleURL(string url, int itag, StdoutLogger logger, bool displayFormats, bool outputURL, bool parallel, bool noProgress, bool noCache, bool dethrottle)
+void handleURL(string url, int itag, StdoutLogger logger, bool displayFormats, bool outputURL, bool parallel, bool noProgress, bool noCache, bool dethrottle, string proxy)
 {
     logger.display(formatTitle("Handling " ~ url));
-    YoutubeVideoURLExtractor parser = Cache(logger, noCache ? Yes.forceRefresh : No.forceRefresh).makeParser(url, itag);
+    Cache cache = Cache(logger, noCache ? Yes.forceRefresh : No.forceRefresh);
+    cache.proxy = proxy;
+    YoutubeVideoURLExtractor parser = cache.makeParser(url, itag);
     logger.displayVerbose("Downloaded video HTML");
     logger.displayVerbose("Attempt to dethrottle : " ~ (dethrottle ? "Yes" : "No"));
 
@@ -171,5 +176,6 @@ void handleURL(string url, int itag, StdoutLogger logger, bool displayFormats, b
             return 0;
         }, !noProgress);
     }
+    downloader.setProxy(proxy);
     downloader.download(destination, link, url);
 }
