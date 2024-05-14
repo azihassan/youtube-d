@@ -7,7 +7,7 @@ import std.conv : to;
 import std.array : replace;
 import std.file : readText;
 import std.string : indexOf, format, lastIndexOf, split, strip, toStringz, startsWith;
-import std.regex : ctRegex, matchFirst;
+import std.regex : ctRegex, matchFirst, escaper;
 import std.algorithm : canFind, filter, reverse, map;
 import std.format : formattedRead;
 
@@ -556,12 +556,12 @@ struct ThrottlingAlgorithm
 
     string findChallengeName()
     {
-        return javascript.matchOrFail!(`\|\|([a-zA-Z]{3})\(""\)`, false);
+        return javascript.matchOrFail!(`\|\|(.{3})\(""\)`, false);
     }
 
     string findChallengeImplementation()
     {
-        string challengeName = findChallengeName();
+        string challengeName = findChallengeName().escaper().to!string;
         logger.displayVerbose("challenge name : ", challengeName);
         return javascript.matchOrFail(challengeName ~ `=function\(a\)\{((.|\s)+?)return b\.join\(""\)\};`).strip();
     }
@@ -597,8 +597,9 @@ struct ThrottlingAlgorithm
         }
         catch(Exception e)
         {
-            logger.display(e.message.idup.formatError());
-            logger.display("Failed to solve N parameter, downloads might be rate limited".formatError());
+            logger.display(e.message.idup.formatWarning());
+            logger.display("Failed to solve N parameter, downloads might be rate limited".formatWarning());
+            logger.displayVerbose(e.info.to!string.formatWarning());
             return n;
         }
     }
@@ -624,6 +625,18 @@ unittest
 
     string expected = "vDwB7sNN_ZK_8w";
     string actual = algorithm.solve("kVFjC9ssz1cOv88r");
+
+    assert(expected == actual, expected ~ " != " ~ actual);
+}
+
+unittest
+{
+    writeln("Should solve challenge with unusual characters in it");
+    auto algorithm = ThrottlingAlgorithm("tests/a960a0cb.js".readText(), new StdoutLogger());
+    assert(algorithm.findChallengeName() == "$la", algorithm.findChallengeName() ~ " != $la");
+
+    string expected = "CJ6mFweU_U3YMQ";
+    string actual = algorithm.solve("lTCmja7irJFW2HwaD");
 
     assert(expected == actual, expected ~ " != " ~ actual);
 }
