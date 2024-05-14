@@ -69,21 +69,21 @@ string matchOrFail(string pattern, bool escape = false)(string source)
 {
     trace("Matching ", pattern);
     auto regex = ctRegex!(escape ? pattern.escaper.to!string : pattern);
-    return source.matchFirst(regex).matchOrFail();
+    return source.matchFirst(regex).matchOrFail(pattern);
 }
 
 string matchOrFail(string source, string pattern)
 {
     trace("Matching ", pattern);
     auto regex = regex(pattern);
-    return source.matchFirst(regex).matchOrFail();
+    return source.matchFirst(regex).matchOrFail(pattern);
 }
 
-string matchOrFail(Captures!string match)
+string matchOrFail(Captures!string match, string pattern = "")
 {
     if(match.empty)
     {
-        throw new Exception("Failed to match regular expression");
+        throw new Exception("Failed to match regular expression " ~ pattern);
     }
     return match[1];
 }
