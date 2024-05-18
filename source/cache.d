@@ -11,7 +11,7 @@ import std.string : indexOf;
 import std.regex : ctRegex, matchFirst;
 import std.algorithm : map;
 
-import helpers : StdoutLogger, parseID, parseQueryString, parseBaseJSKey;
+import helpers : StdoutLogger, parseID, parseQueryString, parseBaseJSKey, formatTitle, formatSuccess;
 import parsers : parseBaseJSURL, YoutubeVideoURLExtractor, SimpleYoutubeVideoURLExtractor, AdvancedYoutubeVideoURLExtractor;
 
 struct Cache
@@ -144,7 +144,8 @@ struct Cache
 
 unittest
 {
-    writeln("Given SimpleYoutubeVideoURLExtractor, when cache is stale, should redownload HTML");
+    writeln("Given SimpleYoutubeVideoURLExtractor, when cache is stale, should redownload HTML".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
     bool downloadAttempted;
     auto downloadAsString = delegate string(string url) {
         if(url == "https://youtu.be/zoz")
@@ -162,7 +163,8 @@ unittest
 
 unittest
 {
-    writeln("Given SimpleYoutubeVideoURLExtractor, when cache is fresh, should not download HTML");
+    writeln("Given SimpleYoutubeVideoURLExtractor, when cache is fresh, should not download HTML".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
     bool downloadAttempted;
     auto downloadAsString = delegate string(string url) {
         if(url == "https://youtu.be/zoz-fresh")
@@ -183,7 +185,8 @@ unittest
 
 unittest
 {
-    writeln("Given AdvancedYoutubeVideoURLExtractor, when cache is stale, should redownload HTML");
+    writeln("Given AdvancedYoutubeVideoURLExtractor, when cache is stale, should redownload HTML".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
     bool downloadAttempted;
     auto downloadAsString = delegate string(string url) {
         if(url == "https://youtu.be/dQw4w9WgXcQ")
@@ -201,7 +204,8 @@ unittest
 
 unittest
 {
-    writeln("Given AdvancedYoutubeVideoURLExtractor, when cache is fresh, should not download HTML");
+    writeln("Given AdvancedYoutubeVideoURLExtractor, when cache is fresh, should not download HTML".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
     bool downloadAttempted;
     auto downloadAsString = delegate string(string url) {
         if(url == "https://youtu.be/dQw4w9WgXcQ-fresh")
@@ -226,7 +230,8 @@ unittest
 
 unittest
 {
-    writeln("When forcing refresh, should download HTML");
+    writeln("When forcing refresh, should download HTML".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
     bool downloadAttempted;
     bool baseJSDownloadAttempted;
     auto downloadAsString = delegate string(string url) {
@@ -251,7 +256,8 @@ unittest
 
 unittest
 {
-    writeln("When base.js is cached, should read from cache");
+    writeln("When base.js is cached, should read from cache".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
     "tests/0c96dfd3.js".write("tests/base.min.js".readText());
 
     bool baseJSDownloadAttempted;
@@ -272,7 +278,8 @@ unittest
 
 unittest
 {
-    writeln("When base.js is not cached, should download it");
+    writeln("When base.js is not cached, should download it".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
     if("tests/0c96dfd3.js".exists())
     {
         "tests/0c96dfd3.js".remove();

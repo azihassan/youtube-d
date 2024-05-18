@@ -11,7 +11,7 @@ import std.regex : ctRegex, matchFirst, escaper;
 import std.algorithm : canFind, filter, reverse, map;
 import std.format : formattedRead;
 
-import helpers : parseQueryString, matchOrFail, StdoutLogger, formatError, formatWarning;
+import helpers : parseQueryString, matchOrFail, StdoutLogger, formatTitle, formatSuccess, formatError, formatWarning;
 
 import html;
 import duktape;
@@ -158,7 +158,8 @@ class SimpleYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
 
 unittest
 {
-    writeln("Should parse video URL and metadata from regular videos");
+    writeln("Should parse video URL and metadata from regular videos".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
     string html = readText("tests/zoz.html");
     auto extractor = new SimpleYoutubeVideoURLExtractor(html, new StdoutLogger());
 
@@ -173,7 +174,8 @@ unittest
 
 unittest
 {
-    writeln("Should parse ID correctly (itemprop = 'identifier' version)");
+    writeln("Should parse ID correctly (itemprop = 'identifier' version)".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
     string html = readText("tests/identifier.html");
     auto extractor = new SimpleYoutubeVideoURLExtractor(html, new StdoutLogger());
 
@@ -183,7 +185,8 @@ unittest
 unittest
 {
     import std.exception : collectExceptionMsg;
-    writeln("Should gracefully fail for unplayable videos");
+    writeln("Should gracefully fail for unplayable videos".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
     string html = readText("tests/fgDQyFeBBIo.html");
     string exceptionMessage = collectExceptionMsg(new SimpleYoutubeVideoURLExtractor(html, new StdoutLogger()));
     string expectedExceptionMessage = "Video is unplayable because of status LOGIN_REQUIRED";
@@ -234,7 +237,8 @@ struct YoutubeFormat
 
 unittest
 {
-    writeln("Should parse video formats");
+    writeln("Should parse video formats".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
     string html = readText("tests/zoz.html");
     auto extractor = new SimpleYoutubeVideoURLExtractor(html, new StdoutLogger());
 
@@ -334,7 +338,8 @@ class AdvancedYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
 
 unittest
 {
-    writeln("Should parse video formats from VEVO videos");
+    writeln("Should parse video formats from VEVO videos".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
     string html = readText("tests/dQ.html");
     auto extractor = new AdvancedYoutubeVideoURLExtractor(html, "", new StdoutLogger());
 
@@ -373,7 +378,8 @@ unittest
 
 unittest
 {
-    writeln("Should parse video URL and metadata from VEVO videos");
+    writeln("Should parse video URL and metadata from VEVO videos".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
     string html = readText("tests/dQw4w9WgXcQ.html");
     string baseJS = readText("tests/base.min.js");
     auto extractor = new AdvancedYoutubeVideoURLExtractor(html, baseJS, new StdoutLogger());
@@ -409,7 +415,8 @@ YoutubeVideoURLExtractor makeParser(string html, string delegate(string) perform
 
 unittest
 {
-    writeln("When video is VEVO song, should create advanced parser");
+    writeln("When video is VEVO song, should create advanced parser".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
     string html = "tests/dQ.html".readText();
     auto parser = makeParser(html, url => "", new StdoutLogger());
     assert(cast(AdvancedYoutubeVideoURLExtractor) parser);
@@ -418,7 +425,8 @@ unittest
 
 unittest
 {
-    writeln("When video regular should create simple parser");
+    writeln("When video regular should create simple parser".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
     string html = "tests/zoz.html".readText();
     auto parser = makeParser(html, url => "", new StdoutLogger());
     assert(cast(SimpleYoutubeVideoURLExtractor) parser);
@@ -432,7 +440,8 @@ string parseBaseJSURL(string html)
 
 unittest
 {
-    writeln("Should parse base.js URL");
+    writeln("Should parse base.js URL".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
     assert("https://www.youtube.com/s/player/59acb1f3/player_ias.vflset/ar_EG/base.js" == "tests/dQ.html".readText().parseBaseJSURL());
     assert("https://www.youtube.com/s/player/7862ca1f/player_ias.vflset/ar_EG/base.js" == "tests/dQw4w9WgXcQ.html".readText().parseBaseJSURL());
 }
@@ -533,7 +542,8 @@ struct EncryptionAlgorithm
 
 unittest
 {
-    writeln("When video is VEVO song, should correctly decrypt video signature");
+    writeln("When video is VEVO song, should correctly decrypt video signature".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
     auto algorithm = EncryptionAlgorithm("tests/base.min.js".readText(), new StdoutLogger());
     string signature = algorithm.decrypt("L%3D%3DgKKNERRt_lv67W%3DvA4fU6N2qzrARSUbfqeXlAL827irDQICgwCLRfLgHEW2t5_GLJtRC-yoiR8sy0JR-uqLLRJlLJbgIQRw8JQ0qO1");
     assert(signature == "AOq0QJ8wRQIgbJLlJRLLqu-RJ0ys8Rioy-CRtJLG_5t2WEHgLfRLCwgCIQDri728L1lXeqfbUSRArzq2N6Uf4AvLW76vl_tRRENKKg%3D%3D");
@@ -607,7 +617,8 @@ struct ThrottlingAlgorithm
 
 unittest
 {
-    writeln("Should parse challenge");
+    writeln("Should parse challenge".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
     auto algorithm = ThrottlingAlgorithm("tests/base.min.js".readText(), new StdoutLogger());
     assert(algorithm.findChallengeName() == "ima", algorithm.findChallengeName() ~ " != ima");
 
@@ -619,7 +630,8 @@ unittest
 
 unittest
 {
-    writeln("Should parse new challenge");
+    writeln("Should parse new challenge".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
     auto algorithm = ThrottlingAlgorithm("tests/717a6f94.js".readText(), new StdoutLogger());
     assert(algorithm.findChallengeName() == "bma", algorithm.findChallengeName() ~ " != bma");
 
@@ -631,7 +643,8 @@ unittest
 
 unittest
 {
-    writeln("Should solve challenge with unusual characters in it");
+    writeln("Should solve challenge with unusual characters in it".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
     auto algorithm = ThrottlingAlgorithm("tests/a960a0cb.js".readText(), new StdoutLogger());
     assert(algorithm.findChallengeName() == "$la", algorithm.findChallengeName() ~ " != $la");
 
