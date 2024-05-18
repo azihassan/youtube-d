@@ -6,7 +6,7 @@ import std.string : startsWith, indexOf, format, split;
 import std.file : append, exists, read, remove, getSize;
 import std.range : iota;
 import std.net.curl : Curl, CurlOption;
-import helpers : getContentLength, sanitizePath, StdoutLogger, formatSuccess;
+import helpers : getContentLength, sanitizePath, StdoutLogger, formatSuccess, formatTitle;
 
 import parsers : YoutubeFormat;
 
@@ -164,6 +164,8 @@ class ParallelDownloader : Downloader
 
     unittest
     {
+        writeln("Should calculate offsets correctly");
+        scope(success) writeln("OK\n".formatSuccess());
         auto downloader = new ParallelDownloader(new StdoutLogger(), "", "", YoutubeFormat(18, 9371359, "360p", "video/mp4"));
         ulong length = 20 * 1024 * 1024;
         assert([0, 5 * 1024 * 1024] == downloader.calculateOffset(length, 4, 0));
@@ -174,6 +176,8 @@ class ParallelDownloader : Downloader
 
     unittest
     {
+        writeln("Should calculate offsets correctly");
+        scope(success) writeln("OK\n".formatSuccess());
         auto downloader = new ParallelDownloader(new StdoutLogger(), "", "", YoutubeFormat(18, 9371359, "360p", "video/mp4"));
         ulong length = 23;
         assert([0, 5] == downloader.calculateOffset(length, 4, 0));
