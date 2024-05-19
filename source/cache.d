@@ -83,7 +83,7 @@ struct Cache
         }
         else
         {
-            logger.display("Cache hit, skipping HTML download...");
+            logger.display("Cache hit (" ~ htmlCachePath ~ "), skipping HTML download...");
         }
     }
 
@@ -98,7 +98,7 @@ struct Cache
         }
         else
         {
-            logger.display("base.js cache hit, skipping download...");
+            logger.display("base.js cache hit (" ~ baseJSCachePath ~ "), skipping download...");
         }
     }
 
