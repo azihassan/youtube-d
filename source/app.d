@@ -17,6 +17,8 @@ import cache : Cache;
 
 pragma(lib, "curl");
 
+enum VERSION = "0.0.5";
+
 version(linux)
 {
     import core.sys.posix.signal;
@@ -39,6 +41,7 @@ void main(string[] args)
     bool noCache;
     bool dethrottle = true;
     bool chunked;
+    bool displayVersion;
 
     version(linux)
     {
@@ -58,11 +61,17 @@ void main(string[] args)
         "no-cache", "Skip caching of HTML and base.js", &noCache,
         "d|dethrottle", "Attempt to dethrottle download speed by solving the N challenge (defaults to true)", &dethrottle,
         "no-dethrottle", "Skip N-challenge dethrottling attempt", () { dethrottle = false; },
+        "version", "Displays youtube-d version", &displayVersion
     );
+    if(displayVersion)
+    {
+        VERSION.writeln();
+        return;
+    }
 
     if(help.helpWanted || args.length == 1)
     {
-        defaultGetoptPrinter("Youtube downloader v0.0.4", help.options);
+        defaultGetoptPrinter("Youtube downloader v" ~ VERSION, help.options);
         return;
     }
 
