@@ -4,11 +4,32 @@ import std.regex : ctRegex, matchFirst, escaper, regex, Captures;
 import std.algorithm : filter;
 import std.conv : to;
 import std.net.curl : HTTP;
-import std.string : split, indexOf, startsWith;
+import std.string : split, indexOf, startsWith, endsWith;
 import std.format : formattedRead;
 
-ulong getContentLength(string url)
+import parsers : YoutubeFormat, AudioVisual;
+
+ulong getContentLength(string url, YoutubeFormat youtubeFormat)
 {
+    writeln("url = ", url);
+    writeln("youtubeFormat = ", youtubeFormat.length);
+    if(youtubeFormat.length != 0)
+    {
+        writeln("return ", youtubeFormat.length);
+        return youtubeFormat.length;
+    }
+
+    writeln("queryString = ");
+    string[string] queryString = url.parseQueryString();
+    writeln("queryString = ", queryString);
+    if("range" in queryString && !queryString["range"].endsWith("-"))
+    {
+        string[] limits = queryString["range"].split("-");
+        writeln("return ", limits);
+        return limits[1].to!ulong - limits[0].to!ulong;
+    }
+
+    writeln("Sending head request");
     auto http = HTTP(url);
     http.method = HTTP.Method.head;
     http.addRequestHeader("User-Agent", "com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)");
@@ -17,7 +38,14 @@ ulong getContentLength(string url)
     {
         throw new Exception("Failed with status " ~ http.statusLine.code.to!string);
     }
+    writeln("return ", http.responseHeaders["content-length"]);
     return http.responseHeaders["content-length"].to!ulong;
+}
+
+unittest
+{
+    assert(1337L == "".getContentLength(YoutubeFormat(232, 1337L, "360p", "video/mp4", [AudioVisual.VIDEO])));
+    assert(42L == "https://www.youtube.com/video.mp4?foo=bar&range=10-52&bar=baz".getContentLength(YoutubeFormat(18, 0L, "360p", "video/mp4", [AudioVisual.VIDEO])));
 }
 
 string sanitizePath(string path)
@@ -38,12 +66,12 @@ string sanitizePath(string path)
 
 string[string] parseQueryString(string input)
 {
+    string[string] result;
     auto questionMarkIndex = input.indexOf("?");
     if(questionMarkIndex != -1)
     {
         input = input[questionMarkIndex + 1 .. $];
     }
-    string[string] result;
     foreach(params; input.split("&"))
     {
         string[] parts = params.split("=");

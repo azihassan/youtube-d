@@ -176,7 +176,7 @@ void handleURL(string url, int itag, StdoutLogger logger, bool displayFormats, b
     {
         logger.display("Using RegularDownloader");
         bool finished = false;
-        downloader = new RegularDownloader(logger, (size_t total, size_t current) {
+        downloader = new RegularDownloader(logger, youtubeFormat, (size_t total, size_t current) {
             if(current == 0 || total == 0 || finished)
             {
                 return 0;
