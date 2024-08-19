@@ -21,12 +21,14 @@ class RegularDownloader : Downloader
     private StdoutLogger logger;
     private int delegate(ulong length, ulong currentLength) onProgress;
     private bool progress;
+    private YoutubeFormat youtubeFormat;
 
-    this(StdoutLogger logger, int delegate(ulong length, ulong currentLength) onProgress, bool progress = true)
+    this(StdoutLogger logger, YoutubeFormat youtubeFormat, int delegate(ulong length, ulong currentLength) onProgress, bool progress = true)
     {
         this.logger = logger;
         this.onProgress = onProgress;
         this.progress = progress;
+        this.youtubeFormat = youtubeFormat;
     }
 
     public void download(string destination, string url, string referer)
@@ -47,8 +49,8 @@ class RegularDownloader : Downloader
 
         http.verbose(logger.verbose);
         auto curl = http.handle();
-        ulong length = url.getContentLength();
-        logger.displayVerbose("Length = ", length);
+        ulong length = url.getContentLength(youtubeFormat);
+        logger.display("Length = ", length);
         if(destination.exists() && destination.getSize() == length)
         {
             logger.display("Done !".formatSuccess());
@@ -98,10 +100,14 @@ unittest
     server.listen(1);
 
     task!(() {
-        new RegularDownloader(new StdoutLogger(), (ulong length, ulong currentLength) { return 0; }).download(
-                "destination.mp4",
-                "http://127.0.0.1:1234/destination.mp4",
-                "Random referer"
+        new RegularDownloader(
+                new StdoutLogger(true),
+                YoutubeFormat(18, 0L, "360p", "video/mp4", []),
+                (ulong length, ulong currentLength) { return 0; }
+        ).download(
+            "destination.mp4",
+            "http://127.0.0.1:1234/destination.mp4?",
+            "Random referer"
         );
     }).executeInNewThread();
 
@@ -157,7 +163,7 @@ class ParallelDownloader : Downloader
 
     public void download(string destination, string url, string referer)
     {
-        ulong length = url.getContentLength();
+        ulong length = url.getContentLength(youtubeFormat);
         logger.displayVerbose("Length = ", length);
         if(destination.exists() && destination.getSize() == length)
         {
@@ -187,7 +193,7 @@ class ParallelDownloader : Downloader
                 logger.displayVerbose(partialDestination, " already has ", partialDestination.getSize(), " bytes, skipping");
                 continue;
             }
-            new RegularDownloader(logger, (ulong _, ulong __) {
+            new RegularDownloader(logger, youtubeFormat, (ulong _, ulong __) {
                 if(length == 0)
                 {
                     return 0;
