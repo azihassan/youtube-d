@@ -1,44 +1,38 @@
 import std.logger;
 import std.stdio : writeln, writefln, File, stdout;
-import std.regex : ctRegex, matchFirst, escaper, regex, Captures;
-import std.algorithm : filter;
+import std.regex : ctRegex, matchAll, matchFirst, escaper, regex, Captures;
+import std.algorithm : filter, map, canFind, sum;
 import std.conv : to;
 import std.net.curl : HTTP;
-import std.string : split, indexOf, startsWith, endsWith;
+import std.string : split, indexOf, startsWith, endsWith, strip;
 import std.format : formattedRead;
+import std.range : chunks;
 
 import parsers : YoutubeFormat, AudioVisual;
 
 ulong getContentLength(string url, YoutubeFormat youtubeFormat)
 {
-    writeln("url = ", url);
-    writeln("youtubeFormat = ", youtubeFormat.length);
     if(youtubeFormat.length != 0)
     {
-        writeln("return ", youtubeFormat.length);
         return youtubeFormat.length;
     }
 
-    writeln("queryString = ");
     string[string] queryString = url.parseQueryString();
-    writeln("queryString = ", queryString);
     if("range" in queryString && !queryString["range"].endsWith("-"))
     {
         string[] limits = queryString["range"].split("-");
-        writeln("return ", limits);
         return limits[1].to!ulong - limits[0].to!ulong;
     }
 
-    writeln("Sending head request");
     auto http = HTTP(url);
     http.method = HTTP.Method.head;
-    http.addRequestHeader("User-Agent", "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:95.0) Gecko/20100101 Firefox/95.0");
+    //http.addRequestHeader("User-Agent", "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:95.0) Gecko/20100101 Firefox/95.0");
+    http.addRequestHeader("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.5 Safari/605.1.15,gzip(gfe)");
     http.perform();
     if(http.statusLine.code >= 400)
     {
         throw new Exception("Failed with status " ~ http.statusLine.code.to!string);
     }
-    writeln("return ", http.responseHeaders["content-length"]);
     return http.responseHeaders["content-length"].to!ulong;
 }
 
@@ -297,4 +291,61 @@ unittest
     assert("/s/player/0c96dfd3/player_ias.vflset/ar_EG/base.js".parseBaseJSKey() == "0c96dfd3");
     assert("https://www.youtube.com/s/player/0c96dfd3/player_ias.vflset/ar_EG/base.js".parseBaseJSKey() == "0c96dfd3");
     assert("www.youtube.com/s/player/0c96dfd3/player_ias.vflset/ar_EG/base.js".parseBaseJSKey() == "0c96dfd3");
+}
+
+YoutubeFormat[] parseM3u8Formats(string m3u8)
+{
+    YoutubeFormat[] formats;
+    string[] lines = m3u8.strip().split("\n");
+    size_t firstChunkIndex;
+    do
+    {
+        firstChunkIndex++;
+    }
+    while(!lines[firstChunkIndex].startsWith("#EXT-X-STREAM-INF:"));
+
+    foreach(videoInfo; lines[firstChunkIndex .. $].chunks(2))
+    {
+        string streamInfo = videoInfo[0]["#EXT-X-STREAM-INF:".length .. $];
+        string url = videoInfo[1];
+
+        string codecs = videoInfo[0].matchOrFail!`CODECS="(.+)"`;
+        string resolution = videoInfo[0].matchOrFail!`RESOLUTION=(\d+x\d+)`;
+
+        YoutubeFormat format;
+        format.itag = url.matchOrFail!`\/itag\/(\d+)\/`.to!int;
+        format.length = url.matchAll(ctRegex!`clen%3D(\d+)`).map!(capture => capture[1].to!ulong).sum();
+        format.quality = resolution.split("x")[1] ~ "p";
+        if(codecs.canFind("mp4a"))
+        {
+            format.audioVisual ~= AudioVisual.AUDIO;
+            format.mimetype = "audio/mp4";
+        }
+        if(codecs.canFind("avc"))
+        {
+            format.audioVisual ~= AudioVisual.VIDEO;
+            format.mimetype = "video/mp4";
+        }
+
+        formats ~= format;
+    }
+    return formats;
+}
+
+unittest
+{
+    writeln("Should parse HLS m3u8 formats".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
+    string m3u8 = "tests/index.m3u8".readText();
+    YoutubeFormat[] expected = [
+        YoutubeFormat(91, 4659962 + 8272591, "144p", "video/mp4", [AudioVisual.AUDIO, AudioVisual.VIDEO]),
+        YoutubeFormat(92, 4659962 + 17875980, "240p", "audio/mp4", [AudioVisual.AUDIO]),
+        YoutubeFormat(93, 12365022 + 33446485, "360p", "video/mp4", [AudioVisual.VIDEO]),
+        YoutubeFormat(94, 12365022 + 62573407, "480p", "video/mp4", [AudioVisual.AUDIO, AudioVisual.VIDEO]),
+        YoutubeFormat(95, 12365022 + 124753691, "720p", "video/mp4", [AudioVisual.AUDIO, AudioVisual.VIDEO]),
+        YoutubeFormat(96, 12365022 + 239812801, "1080p", "video/mp4", [AudioVisual.AUDIO, AudioVisual.VIDEO])
+    ];
+
+    YoutubeFormat[] actual = m3u8.parseM3u8Formats();
+    assert(expected == actual);
 }

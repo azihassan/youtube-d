@@ -7,7 +7,7 @@ import std.file : exists, getcwd, readText, remove, tempDir, write;
 import std.net.curl : Curl, CurlOption;
 import std.path : buildPath;
 import std.typecons : Flag, Yes, No;
-import std.string : indexOf;
+import std.string : endsWith, indexOf;
 import std.regex : ctRegex, matchFirst;
 import std.algorithm : map;
 
@@ -34,6 +34,7 @@ struct Cache
             curl.set(CurlOption.url, url);
             curl.set(CurlOption.encoding, "deflate, gzip");
             curl.set(CurlOption.followlocation, true);
+            curl.set(CurlOption.useragent, "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.5 Safari/605.1.15,gzip(gfe)");
 
             curl.onReceive = (ubyte[] chunk) {
                 result ~= chunk.map!(to!(const(char))).to!string;
@@ -192,8 +193,14 @@ unittest
         if(url == "https://youtu.be/dQw4w9WgXcQ")
         {
             downloadAttempted = true;
+            return "tests/dQw4w9WgXcQ.html".readText();
         }
-        return "tests/dQw4w9WgXcQ.html".readText();
+        else
+        {
+            writeln("base.js detected, returning tests/base.min.js");
+            return "tests/base.min.js".readText();
+        }
+        throw new Exception("Unexcepted URL: " ~ url);
     };
     auto cache = Cache(new StdoutLogger(), downloadAsString);
     cache.cacheDirectory = buildPath(getcwd(), "tests");

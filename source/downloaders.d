@@ -1,11 +1,11 @@
 import std.stdio : writef, writeln, File;
 import std.parallelism : defaultPoolThreads, taskPool, totalCPUs;
-import std.algorithm : each, sort, sum, map, min;
+import std.algorithm : each, sort, sum, map, min, filter;
 import std.conv : to;
-import std.string : startsWith, indexOf, format, split;
+import std.string : startsWith, indexOf, format, split, lineSplitter;
 import std.file : append, exists, read, remove, getSize;
 import std.range : iota;
-import std.net.curl : Curl, CurlOption, HTTP;
+import std.net.curl : Curl, CurlOption, HTTP, get;
 import std.math : ceil;
 import helpers : getContentLength, sanitizePath, StdoutLogger, formatSuccess, formatTitle;
 
@@ -59,7 +59,8 @@ class RegularDownloader : Downloader
 
         auto file = File(destination, "ab");
         curl.set(CurlOption.url, url);
-        curl.set(CurlOption.useragent, "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:95.0) Gecko/20100101 Firefox/95.0");
+        //curl.set(CurlOption.useragent, "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:95.0) Gecko/20100101 Firefox/95.0");
+        curl.set(CurlOption.useragent, "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.5 Safari/605.1.15,gzip(gfe)");
         curl.set(CurlOption.referer, referer);
         curl.set(CurlOption.followlocation, true);
         curl.set(CurlOption.failonerror, true);
@@ -149,6 +150,7 @@ class ParallelDownloader : Downloader
 
     //request range length limit above which youtube starts throttling downloads
     //https://github.com/azihassan/youtube-d/issues/65#issuecomment-2094993192
+
     public immutable LENGTH_THROTTLING_LIMIT = 10.0 * 1024.0 * 1024.0;
 
     this(StdoutLogger logger, string id, string title, YoutubeFormat youtubeFormat, bool progress = true)
@@ -274,3 +276,79 @@ class ChunkedDownloader : ParallelDownloader
     }
 }
 
+//https://rr3---sn-p5h-jhoy.googlevideo.com/videoplayback/id/c303be7a57ea6f28/itag/91/source/youtube/expire/1724813705/ei/KT3OZryRFbDCmLAP0ZW0sA4/ip/102.49.55.161/requiressl/yes/ratebypass/yes/pfa/1/sgoap/clen%3D4659962%3Bdur%3D764.075%3Bgir%3Dyes%3Bitag%3D139%3Blmt%3D1724731671440441/sgovp/clen%3D8272591%3Bdur%3D763.929%3Bgir%3Dyes%3Bitag%3D160%3Blmt%3D1724731663052618/rqh/1/hls_chunk_host/rr3---sn-p5h-jhoy.googlevideo.com/xpc/EgVo2aDSNQ%3D%3D/mh/vz/mm/31,29/mn/sn-p5h-jhoy,sn-apn7en7e/ms/au,rdu/mv/m/mvi/3/pl/17/initcwndbps/391250/spc/Mv1m9jMugnpWvFVyQljKM1pZQINUP9nMutRavY8GPMP3mBAHQ9x5lGAO2u3KZYw/vprv/1/playlist_type/CLEAN/txp/6309224/mt/1724791751/fvip/3/keepalive/yes/sparams/expire,ei,ip,id,itag,source,requiressl,ratebypass,pfa,sgoap,sgovp,rqh,xpc,spc,vprv,playlist_type/sig/AJfQdSswRQIgS6erfF7F7NN8ScQJC33JIBqa3FkM9Gk7lNq0gd64a-MCIQDOBo0dLp_vVWa1lvNHVBc8mstehsyJPV3qs1bpOzS8Wg%3D%3D/lsparams/hls_chunk_host,mh,mm,mn,ms,mv,mvi,pl,initcwndbps/lsig/AGtxev0wRgIhAOk3G0guZupTB9f04t3hunhQ0zZqIT2gwXLdsywduCIeAiEA9Fz-TI3Ix8dHL9eplJ4nu7NHnSi4o4TRYBBjRgpkJss%3D/playlist/index.m3u8/govp/slices%3D0-44728/goap/slices%3D0-62899/begin/0/len/5005/gosq/0/file/seg.ts
+class M3u8Downloader : Downloader
+{
+    private StdoutLogger logger;
+    private int delegate(ulong length, ulong currentLength) onProgress;
+    private bool progress;
+    private YoutubeFormat youtubeFormat;
+
+    this(StdoutLogger logger, YoutubeFormat youtubeFormat, bool progress = true)
+    {
+        this.logger = logger;
+        this.onProgress = onProgress;
+        this.youtubeFormat = youtubeFormat;
+        this.progress = progress;
+    }
+
+    override public void download(string destination, string url, string referer)
+    {
+        logger.display("Length = ", youtubeFormat.length);
+        logger.display("progress = ", progress);
+        logger.display("youtubeFormat = ", youtubeFormat);
+        this.onProgress = (ulong _, ulong __) {
+            if(youtubeFormat.length == 0)
+            {
+                logger.display("youtubeFormat.length == 0");
+                return 0;
+            }
+            ulong current = destination.getSize();
+            auto percentage = 100.0 * (cast(float)(current) / youtubeFormat.length);
+            writef!"\r[%.2f %%] %.2f / %.2f MB"(percentage, current / 1024.0 / 1024.0, youtubeFormat.length / 1024.0 / 1024.0);
+            return 0;
+        };
+
+        string playlist = url.get().idup;
+        foreach(segment; playlist.lineSplitter.filter!(line => line[0] != '#'))
+        {
+            downloadSegment(destination, segment, referer);
+        }
+    }
+
+    private void downloadSegment(string destination, string url, string referer)
+    {
+        auto http = HTTP(url);
+
+        //http.verbose(logger.verbose);
+
+        auto curl = http.handle();
+        if(destination.exists() && destination.getSize() == youtubeFormat.length)
+        {
+            logger.display("Done !".formatSuccess());
+            return;
+        }
+
+        auto file = File(destination, "ab");
+        curl.set(CurlOption.url, url);
+        curl.set(CurlOption.useragent, "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.5 Safari/605.1.15,gzip(gfe)");
+        curl.set(CurlOption.referer, referer);
+        curl.set(CurlOption.followlocation, true);
+        curl.set(CurlOption.failonerror, true);
+        curl.set(CurlOption.connecttimeout, 60 * 3);
+        curl.set(CurlOption.nosignal, true);
+
+        curl.onReceive = (ubyte[] data) {
+            file.rawWrite(data);
+            return data.length;
+        };
+
+        if(progress)
+        {
+            curl.onProgress = (size_t total, size_t current, size_t _, size_t __) {
+                return onProgress(total, current);
+            };
+        }
+        auto result = curl.perform();
+    }
+}
