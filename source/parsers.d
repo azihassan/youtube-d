@@ -6,12 +6,12 @@ import std.typecons : tuple, Tuple;
 import std.conv : to;
 import std.array : replace;
 import std.file : readText;
-import std.string : indexOf, format, lastIndexOf, split, strip, toStringz, startsWith;
+import std.string : indexOf, format, lastIndexOf, split, strip, toStringz, startsWith, lineSplitter;
 import std.regex : ctRegex, matchFirst, escaper;
 import std.algorithm : canFind, filter, reverse, map;
 import std.format : formattedRead;
 
-import helpers : parseQueryString, matchOrFail, StdoutLogger, formatTitle, formatSuccess, formatError, formatWarning;
+import helpers : parseQueryString, matchOrFail, StdoutLogger, formatTitle, formatSuccess, formatError, formatWarning, parseM3u8Formats;
 
 import html;
 import duktape;
@@ -21,6 +21,7 @@ abstract class YoutubeVideoURLExtractor
     protected string html;
     protected Document parser;
     protected StdoutLogger logger;
+    protected string baseJS;
 
     abstract public string getURL(int itag, bool attemptDethrottle = false);
     abstract public ulong findExpirationTimestamp(int itag);
@@ -56,7 +57,7 @@ abstract class YoutubeVideoURLExtractor
 
     public YoutubeFormat getFormat(int itag)
     {
-        YoutubeFormat[] formats = getFormats("formats") ~ getFormats("adaptiveFormats");
+        YoutubeFormat[] formats = getFormats("formats") ~ getFormats("adaptiveFormats") ~ getM3u8Formats("hlsManifestUrl");
         auto match = formats.filter!(format => format.itag == itag);
         if(match.empty)
         {
@@ -67,7 +68,7 @@ abstract class YoutubeVideoURLExtractor
 
     public YoutubeFormat[] getFormats()
     {
-        return getFormats("formats") ~ getFormats("adaptiveFormats");
+        return getFormats("formats") ~ getFormats("adaptiveFormats") ~ getM3u8Formats("hlsManifestUrl");
     }
 
     private YoutubeFormat[] getFormats(string formatKey)
@@ -109,11 +110,38 @@ abstract class YoutubeVideoURLExtractor
         }
         return formats;
     }
+
+    private YoutubeFormat[] getM3u8Formats(string formatKey)
+    {
+        string streamingData = html.matchOrFail!`"streamingData":(.*?),"player`;
+        auto json = streamingData.parseJSON();
+        if(formatKey !in json)
+        {
+            return [];
+        }
+        string manifest = json[formatKey].str.get().idup;
+        return manifest.parseM3u8Formats();
+    }
+
+    protected string solveThrottlingChallenge(string url)
+    {
+        string[string] queryString = url.parseQueryString();
+        if(baseJS == "" || "n" !in queryString)
+        {
+            return url;
+        }
+
+        string n = queryString["n"];
+        logger.displayVerbose("Found n : ", n);
+        auto solver = ThrottlingAlgorithm(baseJS, logger);
+        string solvedN = solver.solve(n);
+        logger.displayVerbose("Solved n : ", solvedN);
+        return url.replace("&n=" ~ n, "&n=" ~ solvedN);
+    }
 }
 
 class SimpleYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
 {
-    private string baseJS;
     this(string html, StdoutLogger logger)
     {
         this.html = html;
@@ -130,27 +158,45 @@ class SimpleYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
 
     override string getURL(int itag, bool attemptDethrottle = false)
     {
+        if(html.canFind(`"itag":` ~ itag.to!string))
+        {
+            return getRegularURL(itag, attemptDethrottle);
+        }
+        return getHLSURL(itag, attemptDethrottle);
+    }
+
+    private string getRegularURL(int itag, bool attemptDethrottle)
+    {
         string url = html
             .matchOrFail(`"itag":` ~ itag.to!string ~ `,"url":"(.*?)"`)
             .replace(`\u0026`, "&");
-
-        string[string] queryString = url.parseQueryString();
-        if(baseJS == "" || !attemptDethrottle || "n" !in queryString)
+        if(!attemptDethrottle)
         {
             return url;
         }
+        return solveThrottlingChallenge(url);
+    }
 
-        string n = queryString["n"];
-        logger.displayVerbose("Found n : ", n);
-        auto solver = ThrottlingAlgorithm(baseJS, logger);
-        string solvedN = solver.solve(n);
-        logger.displayVerbose("Solved n : ", solvedN);
-        return url.replace("&n=" ~ n, "&n=" ~ solvedN);
+    private string getHLSURL(int itag, bool attemptDethrottle)
+    {
+        string formats = parseHLSManifestURL(html).get().idup;
+        foreach(formatURL; formats.lineSplitter.filter!(line => line[0] != '#'))
+        {
+            if(formatURL.canFind("/itag/" ~ itag.to!string ~ "/"))
+            {
+                return formatURL;
+            }
+        }
+        throw new Exception("Failed to find format " ~ itag.to!string);
     }
 
     override ulong findExpirationTimestamp(int itag)
     {
         string videoURL = getURL(itag);
+        if(videoURL.canFind("/expire/"))
+        {
+            return videoURL.matchOrFail!`\/expire\/(\d+)`.to!ulong;
+        }
         string[string] params = videoURL.parseQueryString();
         return params["expire"].to!ulong;
     }
@@ -271,8 +317,6 @@ unittest
 
 class AdvancedYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
 {
-    private string baseJS;
-
     this(string html, string baseJS, StdoutLogger logger)
     {
         this.html = html;
@@ -284,31 +328,52 @@ class AdvancedYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
 
     override string getURL(int itag, bool attemptDethrottle = false)
     {
+        if(html.canFind(`"itag":` ~ itag.to!string))
+        {
+            return getRegularURL(itag, attemptDethrottle);
+        }
+        return getHLSURL(itag, attemptDethrottle);
+    }
+
+    private string getRegularURL(int itag, bool attemptDethrottle)
+    {
         string signatureCipher = findSignatureCipher(itag);
         string[string] params = signatureCipher.parseQueryString();
         auto algorithm = EncryptionAlgorithm(baseJS, logger);
         string sig = algorithm.decrypt(params["s"]);
         string url = params["url"].decodeComponent() ~ "&" ~ params["sp"] ~ "=" ~ sig;
 
-        string[string] urlParams = url.parseQueryString();
-        if("n" !in urlParams || !attemptDethrottle)
+        if(!attemptDethrottle)
         {
             return url;
         }
-
-        string n = urlParams["n"];
-        logger.displayVerbose("Found n : ", n);
-        auto solver = ThrottlingAlgorithm(baseJS, logger);
-        string solvedN = solver.solve(n);
-        logger.displayVerbose("Solved n : ", solvedN);
-        return url.replace("&n=" ~ n, "&n=" ~ solvedN);
+        return solveThrottlingChallenge(url);
     }
+
+    private string getHLSURL(int itag, bool attemptDethrottle)
+    {
+        string formats = parseHLSManifestURL(html).get().idup;
+        foreach(formatURL; formats.lineSplitter.filter!(line => line[0] != '#'))
+        {
+            if(formatURL.canFind("/itag/" ~ itag.to!string ~ "/"))
+            {
+                return formatURL;
+            }
+        }
+        throw new Exception("Failed to find format " ~ itag.to!string);
+    }
+
 
     override ulong findExpirationTimestamp(int itag)
     {
-        string signatureCipher = findSignatureCipher(itag);
-        string[string] params = signatureCipher.parseQueryString()["url"].decodeComponent().parseQueryString();
-        return params["expire"].to!int;
+        bool isRegularOrAdaptive = html.canFind(`"itag":` ~ itag.to!string);
+        if(isRegularOrAdaptive)
+        {
+            string signatureCipher = findSignatureCipher(itag);
+            string[string] params = signatureCipher.parseQueryString();
+            return params["url"].decodeComponent().parseQueryString()["expire"].to!ulong;
+        }
+        return html.parseHLSManifestURL().matchOrFail!`\/expire\/(\d+)`.to!ulong;
     }
 
     string findSignatureCipher(int itag)
@@ -436,6 +501,11 @@ unittest
 string parseBaseJSURL(string html)
 {
     return "https://www.youtube.com" ~ html.matchOrFail!`jsUrl"*:\s*"(.*?)"`;
+}
+
+string parseHLSManifestURL(string html)
+{
+    return html.matchOrFail!`"hlsManifestUrl":"(.*?)"`;
 }
 
 unittest
