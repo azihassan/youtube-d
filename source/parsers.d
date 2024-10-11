@@ -566,7 +566,7 @@ struct ThrottlingAlgorithm
 
     string findChallengeName()
     {
-        return javascript.matchOrFail!(`\|\|(.{3})\(""\)`, false);
+        return javascript.matchOrFail!(`(.{3})=function\(a\)\{var b=a.split`, false);
     }
 
     string findChallengeImplementation()
