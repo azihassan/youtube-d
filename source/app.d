@@ -1,7 +1,7 @@
 import std.stdio : writef, stdout, writeln;
 import std.algorithm : each;
 import std.conv : to;
-import std.string : format;
+import std.string : format, endsWith;
 import std.file : getcwd, write, getSize;
 import std.net.curl : get;
 import std.path : buildPath;
@@ -157,7 +157,12 @@ void handleURL(string url, int itag, StdoutLogger logger, bool displayFormats, b
     logger.display("Downloading ", url, " to ", filename);
 
     Downloader downloader;
-    if(parallel)
+    if(link.endsWith(".m3u8"))
+    {
+        logger.display("Using M3u8Downloader");
+        downloader = new M3u8Downloader(logger, youtubeFormat, !noProgress);
+    }
+    else if(parallel)
     {
         logger.display("Using ParallelDownloader");
         downloader = new ParallelDownloader(logger, parser.getID(), parser.getTitle(), youtubeFormat, !noProgress);
@@ -172,7 +177,7 @@ void handleURL(string url, int itag, StdoutLogger logger, bool displayFormats, b
     {
         logger.display("Using RegularDownloader");
         bool finished = false;
-        downloader = new RegularDownloader(logger, (size_t total, size_t current) {
+        downloader = new RegularDownloader(logger, youtubeFormat, (size_t total, size_t current) {
             if(current == 0 || total == 0 || finished)
             {
                 return 0;
