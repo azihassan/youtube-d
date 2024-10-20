@@ -6,30 +6,24 @@ import std.conv : to;
 import std.net.curl : HTTP;
 import std.string : split, indexOf, startsWith, endsWith;
 import std.format : formattedRead;
+import std.array : replace;
 
 import parsers : YoutubeFormat, AudioVisual;
 
 ulong getContentLength(string url, YoutubeFormat youtubeFormat)
 {
-    writeln("url = ", url);
-    writeln("youtubeFormat = ", youtubeFormat.length);
     if(youtubeFormat.length != 0)
     {
-        writeln("return ", youtubeFormat.length);
         return youtubeFormat.length;
     }
 
-    writeln("queryString = ");
     string[string] queryString = url.parseQueryString();
-    writeln("queryString = ", queryString);
     if("range" in queryString && !queryString["range"].endsWith("-"))
     {
         string[] limits = queryString["range"].split("-");
-        writeln("return ", limits);
         return limits[1].to!ulong - limits[0].to!ulong;
     }
 
-    writeln("Sending head request");
     auto http = HTTP(url);
     http.method = HTTP.Method.head;
     http.addRequestHeader("User-Agent", "com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)");
@@ -38,7 +32,6 @@ ulong getContentLength(string url, YoutubeFormat youtubeFormat)
     {
         throw new Exception("Failed with status " ~ http.statusLine.code.to!string);
     }
-    writeln("return ", http.responseHeaders["content-length"]);
     return http.responseHeaders["content-length"].to!ulong;
 }
 
@@ -262,6 +255,17 @@ string parseID(string url)
             url.formattedRead!"https://youtube.com/shorts/%s"(id);
         }
     }
+    if(url.indexOf("/embed/") != -1)
+    {
+        if(url.startsWith("https://www"))
+        {
+            url.formattedRead!"https://www.youtube.com/embed/%s"(id);
+        }
+        else
+        {
+            url.formattedRead!"https://youtube.com/embed/%s"(id);
+        }
+    }
     return id;
 }
 
@@ -273,6 +277,7 @@ unittest
     assert("https://youtu.be/-H-Fno9xbE4".parseID() == "-H-Fno9xbE4");
     assert("https://www.youtube.com/shorts/_tT2ldpZHek".parseID() == "_tT2ldpZHek");
     assert("https://youtube.com/shorts/_tT2ldpZHek".parseID() == "_tT2ldpZHek");
+    assert("https://www.youtube.com/embed/cvDVjwMXiCs".parseID() == "cvDVjwMXiCs");
     assert("qlsdkqsldkj".parseID() == "");
 }
 
@@ -297,4 +302,39 @@ unittest
     assert("/s/player/0c96dfd3/player_ias.vflset/ar_EG/base.js".parseBaseJSKey() == "0c96dfd3");
     assert("https://www.youtube.com/s/player/0c96dfd3/player_ias.vflset/ar_EG/base.js".parseBaseJSKey() == "0c96dfd3");
     assert("www.youtube.com/s/player/0c96dfd3/player_ias.vflset/ar_EG/base.js".parseBaseJSKey() == "0c96dfd3");
+}
+
+
+string setUrlParameter(string url, string key, string value)
+{
+    if(value == "")
+    {
+        return url;
+    }
+    string[string] queryString = url.parseQueryString();
+    if(key !in queryString)
+    {
+        return url ~ "&" ~ key ~ "=" ~ value;
+    }
+
+    string existingValue = queryString[key];
+    return url.replace("&" ~ key ~ "=" ~ existingValue, "&" ~ key ~ "=" ~ value);
+}
+
+unittest
+{
+    writeln("Should replace URL parameter if it exists".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
+    string expected = "https://www.youtube.com/videoplayback?a=b&pot=456";
+    string actual = "https://www.youtube.com/videoplayback?a=b&pot=123".setUrlParameter("pot", "456");
+    assert(expected == actual, expected ~ " != " ~ actual);
+}
+
+unittest
+{
+    writeln("Should add URL parameter if it does not exist".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
+    string expected = "https://www.youtube.com/videoplayback?a=b&pot=123";
+    string actual = "https://www.youtube.com/videoplayback?a=b".setUrlParameter("pot", "123");
+    assert(expected == actual, expected ~ " != " ~ actual);
 }

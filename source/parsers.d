@@ -10,8 +10,10 @@ import std.string : indexOf, format, lastIndexOf, split, strip, toStringz, start
 import std.regex : ctRegex, matchFirst, escaper;
 import std.algorithm : canFind, filter, reverse, map;
 import std.format : formattedRead;
+import std.range : chain, iota;
+import std.random : uniform;
 
-import helpers : parseQueryString, matchOrFail, StdoutLogger, formatTitle, formatSuccess, formatError, formatWarning;
+import helpers : parseQueryString, matchOrFail, StdoutLogger, formatTitle, formatSuccess, formatError, formatWarning, setUrlParameter;
 
 import html;
 import duktape;
@@ -21,43 +23,18 @@ abstract class YoutubeVideoURLExtractor
     protected string html;
     protected Document parser;
     protected StdoutLogger logger;
+    protected string baseJS;
 
     abstract public string getURL(int itag, bool attemptDethrottle = false);
     abstract public ulong findExpirationTimestamp(int itag);
 
-    public void failIfUnplayable()
-    {
-        auto playabilityStatus = html.matchFirst(ctRegex!`"playabilityStatus":\{"status":"(.*?)",`);
-        if(playabilityStatus.empty)
-        {
-            logger.display("Warning: playability status could not be parsed".formatWarning);
-            return;
-        }
-        if(playabilityStatus[1] != "OK")
-        {
-            throw new Exception("Video is unplayable because of status " ~ playabilityStatus[1]);
-        }
-    }
+    abstract public void failIfUnplayable();
 
-    public string getTitle()
-    {
-        try
-        {
-            JSONValue playerResponse = findInitialPlayerResponse();
-            return playerResponse["videoDetails"]["title"].str;
-        }
-        catch(Exception e)
-        {
-            return "Unknown title";
-        }
+    abstract public string getTitle();
 
-    }
+    abstract public string getID();
 
-    public string getID()
-    {
-        JSONValue playerResponse = findInitialPlayerResponse();
-        return playerResponse["videoDetails"]["videoId"].str;
-    }
+    abstract protected JSONValue getStreamingData();
 
     public YoutubeFormat getFormat(int itag)
     {
@@ -77,8 +54,7 @@ abstract class YoutubeVideoURLExtractor
 
     private YoutubeFormat[] getFormats(string formatKey)
     {
-        string streamingData = html.matchOrFail!`"streamingData":(.*?),"player`;
-        auto json = streamingData.parseJSON();
+        auto json = getStreamingData();
         if(formatKey !in json)
         {
             return [];
@@ -126,11 +102,69 @@ abstract class YoutubeVideoURLExtractor
         }
         throw new Exception("ytInitialPlayerResponse couldn't be parsed, video metadata not found");
     }
+
+    protected string solveThrottlingChallenge(string url)
+    {
+        string[string] queryString = url.parseQueryString();
+        if(baseJS == "" || "n" !in queryString)
+        {
+            return url;
+        }
+
+        string n = queryString["n"];
+        logger.displayVerbose("Found n : ", n);
+        auto solver = ThrottlingAlgorithm(baseJS, logger);
+        string solvedN = solver.solve(n);
+        logger.displayVerbose("Solved n : ", solvedN);
+        return url.replace("&n=" ~ n, "&n=" ~ solvedN);
+    }
 }
 
-class SimpleYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
+abstract class HTMLYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
 {
-    private string baseJS;
+    override public void failIfUnplayable()
+    {
+        auto playabilityStatus = html.matchFirst(ctRegex!`"playabilityStatus":\{"status":"(.*?)",`);
+        if(playabilityStatus.empty)
+        {
+            logger.display("Warning: playability status could not be parsed".formatWarning);
+            return;
+        }
+        if(playabilityStatus[1] != "OK")
+        {
+            throw new Exception("Video is unplayable because of status " ~ playabilityStatus[1]);
+        }
+    }
+
+    override public string getTitle()
+    {
+        try
+        {
+            JSONValue playerResponse = findInitialPlayerResponse();
+            return playerResponse["videoDetails"]["title"].str;
+        }
+        catch(Exception e)
+        {
+            return "Unknown title";
+        }
+
+    }
+
+    override public string getID()
+    {
+        JSONValue playerResponse = findInitialPlayerResponse();
+        return playerResponse["videoDetails"]["videoId"].str;
+    }
+
+    override protected JSONValue getStreamingData()
+    {
+        string streamingData = html.matchOrFail!`"streamingData":(.*?),"player`;
+        return streamingData.parseJSON();
+    }
+}
+
+class SimpleYoutubeVideoURLExtractor : HTMLYoutubeVideoURLExtractor
+{
     this(string html, StdoutLogger logger)
     {
         this.html = html;
@@ -150,13 +184,12 @@ class SimpleYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
         string url = html
             .matchOrFail(`"itag":` ~ itag.to!string ~ `,"url":"(.*?)"`)
             .replace(`\u0026`, "&");
-
-        string[string] queryString = url.parseQueryString();
-        if(baseJS == "" || !attemptDethrottle || "n" !in queryString)
+        if(!attemptDethrottle)
         {
             return url;
         }
 
+        string[string] queryString = url.parseQueryString();
         string n = queryString["n"];
         logger.displayVerbose("Found n : ", n);
         auto solver = ThrottlingAlgorithm(baseJS, logger);
@@ -286,10 +319,8 @@ unittest
     assert(YoutubeFormat(140, 9371359, "unknown", `foobar`, [AudioVisual.VIDEO]).extension == "mp4");
 }
 
-class AdvancedYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
+class AdvancedYoutubeVideoURLExtractor : HTMLYoutubeVideoURLExtractor
 {
-    private string baseJS;
-
     this(string html, string baseJS, StdoutLogger logger)
     {
         this.html = html;
@@ -481,6 +512,28 @@ unittest
     scope(success) writeln("OK\n".formatSuccess());
     assert("https://www.youtube.com/s/player/59acb1f3/player_ias.vflset/ar_EG/base.js" == "tests/dQ.html".readText().parseBaseJSURL());
     assert("https://www.youtube.com/s/player/7862ca1f/player_ias.vflset/ar_EG/base.js" == "tests/dQw4w9WgXcQ.html".readText().parseBaseJSURL());
+    assert("https://www.youtube.com/s/player/4e23410d/player_ias.vflset/ar_EG/base.js" == "tests/cvDVjwMXiCs.html".readText().parseBaseJSURL());
+}
+
+JSONValue parseYoutubeConfig(string html)
+{
+    return parseJSON(`{"CLIENT_CANARY_STATE"` ~ html.matchOrFail!`ytcfg.set\(\{"CLIENT_CANARY_STATE"(.*)\}\);` ~ "}");
+    //return html.matchOrFail!`^ytcfg.set\((.*)\);`.parseJSON();
+}
+
+unittest
+{
+    writeln("Should parse ytcfg JSON object".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
+    string html = "tests/cvDVjwMXiCs.html".readText();
+    assert("WEB_EMBEDDED_PLAYER" == html.parseYoutubeConfig()["INNERTUBE_CONTEXT"]["client"]["clientName"].str);
+    assert("1.20241029.01.00" == html.parseYoutubeConfig()["INNERTUBE_CONTEXT"]["client"]["clientVersion"].str);
+    assert("Cgt3WXVYMWNJNmhCMCi_wZ-5BjIKCgJNQRIEGgAgRw%3D%3D" == html.parseYoutubeConfig()["INNERTUBE_CONTEXT"]["client"]["visitorData"].str);
+
+    html = "tests/dQ.html".readText();
+    assert("WEB" == html.parseYoutubeConfig()["INNERTUBE_CONTEXT"]["client"]["clientName"].str);
+    assert("2.20230317.00.00" == html.parseYoutubeConfig()["INNERTUBE_CONTEXT"]["client"]["clientVersion"].str);
+    assert("CgtHWUduRHd0TUl4RSje-d2gBg%3D%3D" == html.parseYoutubeConfig()["INNERTUBE_CONTEXT"]["client"]["visitorData"].str);
 }
 
 struct EncryptionAlgorithm
@@ -731,4 +784,110 @@ unittest
     string actual = algorithm.solve("dQHBl4-fgbfRe1kiGG");
 
     assert(expected == actual, expected ~ " != " ~ actual);
+}
+
+class PlayerYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
+{
+    private JSONValue json;
+    private string clientPlaybackNonce;
+    private string poToken;
+    this(string html, string baseJS, string player, string poToken, string clientPlaybackNonce, StdoutLogger logger)
+    {
+        this.html = html;
+        this.baseJS = baseJS;
+        this.poToken = poToken;
+        this.clientPlaybackNonce = clientPlaybackNonce;
+        this.logger = logger;
+
+        this.json = player.parseJSON();
+        failIfUnplayable();
+    }
+
+    override public string getURL(int itag, bool attemptDethrottle = false)
+    {
+        string url;
+        foreach(format; chain(getStreamingData()["formats"].array, getStreamingData()["adaptiveFormats"].array))
+        {
+            if(itag == format["itag"].integer)
+            {
+                url = format["url"].str;
+                break;
+            }
+        }
+        if(url == "")
+        {
+            throw new Exception("Unknown itag : " ~ itag.to!string);
+            return "";
+        }
+        url = setUrlParameter(url, "pot", poToken);
+        url = setUrlParameter(url, "cpn", clientPlaybackNonce);
+        if(!attemptDethrottle)
+        {
+            return url;
+        }
+
+        string[string] queryString = url.parseQueryString();
+        string n = queryString["n"];
+        logger.displayVerbose("Found n : ", n);
+        auto solver = ThrottlingAlgorithm(baseJS, logger);
+        string solvedN = solver.solve(n);
+        logger.displayVerbose("Solved n : ", solvedN);
+        return url.replace("&n=" ~ n, "&n=" ~ solvedN);
+    }
+
+    override public ulong findExpirationTimestamp(int itag)
+    {
+        string videoURL = getURL(itag);
+        string[string] params = videoURL.parseQueryString();
+        return params["expire"].to!ulong;
+    }
+
+    override public void failIfUnplayable()
+    {
+        //todo add me
+        logger.display("failIfUnplayable not implemented yet for embedded players".formatWarning());
+    }
+
+    override public string getTitle()
+    {
+        return this.json["videoDetails"]["title"].str;
+    }
+
+    override public string getID()
+    {
+        return this.json["videoDetails"]["videoId"].str;
+    }
+
+    override protected JSONValue getStreamingData()
+    {
+        return this.json["streamingData"];
+    }
+}
+unittest
+{
+    writeln("When video is embedded, should parse from player JSON response".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
+    string html = readText("tests/cvDVjwMXiCs.html");
+    string baseJS = readText("tests/4e23410d.js");
+    string player = readText("tests/cvDVjwMXiCs.json");
+    string cpn = generateClientPlayerNonce();
+    auto extractor = new PlayerYoutubeVideoURLExtractor(html, baseJS, player, "MnTzqqeGiL40LvOS8qO2zA4oPs9hKB03p_jFCpNuAOAzaPVsQNzkqKOokO8z4cu6Az_afF7dFchYJ_YHINMszhIrrmGEzU7E1sYY-fp78SP5me0kAWQ1nGt5Hgc0NiJZQdUtQMod6_9roD2TTmmLn6xTv1N2Vw==", cpn, new StdoutLogger());
+
+    assert(extractor.getID() == "cvDVjwMXiCs");
+    assert(extractor.getTitle() == "A Cat Is More Terrifying Than a 200lbs Caucasian Shepherd Dog 😂");
+
+    assert(extractor.getURL(18, true) == "https://rr2---sn-f5o5-jhol.googlevideo.com/videoplayback?expire=1730607289&ei=WaQmZ5HgL9ugp-oP44au6Aw&ip=105.66.133.191&id=o-AA6VSxdwDk4_Pep7gIgAjfYNKrSVmOXCAqt2dRjAPcCh&itag=18&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&met=1730585689%2C&mh=Xe&mm=31%2C29&mn=sn-f5o5-jhol%2Csn-h5q7knes&ms=au%2Crdu&mv=m&mvi=2&pl=24&rms=au%2Cau&initcwndbps=263750&bui=AQn3pFQsf-_NeeEqNaCDVqitDOkxI1pbKjn6r5pGQFD7xbIJrezx4ilo2YbWMo7BtnsdcNSOF5hzjjYV&spc=qtApAfKUTQaLFe5Lb-sWaSDrZVSflcoeXLlGY1UAsk401P3hDTe3sYPyUkgKtbg&vprv=1&svpuc=1&mime=video%2Fmp4&ns=f5vE5GvOkH-bdCnpKrjHjT4Q&rqh=1&gir=yes&clen=15315508&ratebypass=yes&dur=269.792&lmt=1730567241612408&mt=1730585332&fvip=5&fexp=51312688%2C51326932&c=WEB_EMBEDDED_PLAYER&sefc=1&txp=5538434&n=GI74_KKCWlxRz&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cratebypass%2Cdur%2Clmt&sig=AJfQdSswRAIgI94EQto5NaCtxAGcd_YNjnSXrD3n5Dolym0uS9CxMV8CIDczETx24P4d59sWHI0UYu0cOB2E20ovOG5p8lCa70-v&lsparams=met%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=ACJ0pHgwRQIhAM2AQc3NMTebfAQbzIMZm9lwfzQMXxn7NUoAKjfwJQxzAiA_Cmx7z61pJRlI07sEJeh_ANtCmHM2GMEUMoDvJ74WMw%3D%3D&pot=MnTzqqeGiL40LvOS8qO2zA4oPs9hKB03p_jFCpNuAOAzaPVsQNzkqKOokO8z4cu6Az_afF7dFchYJ_YHINMszhIrrmGEzU7E1sYY-fp78SP5me0kAWQ1nGt5Hgc0NiJZQdUtQMod6_9roD2TTmmLn6xTv1N2Vw==&cpn=" ~ cpn);
+
+    assert(extractor.getURL(313, true) == "https://rr2---sn-f5o5-jhol.googlevideo.com/videoplayback?expire=1730607289&ei=WaQmZ5HgL9ugp-oP44au6Aw&ip=105.66.133.191&id=o-AA6VSxdwDk4_Pep7gIgAjfYNKrSVmOXCAqt2dRjAPcCh&itag=313&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C271%2C278%2C313%2C394%2C395%2C396%2C397%2C398%2C399%2C400%2C401&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&met=1730585689%2C&mh=Xe&mm=31%2C29&mn=sn-f5o5-jhol%2Csn-h5q7knes&ms=au%2Crdu&mv=m&mvi=2&pl=24&rms=au%2Cau&initcwndbps=263750&bui=AQn3pFQqkkYCR1QU7roBsq32PNbXiM6c0OC3u1hM7K8-KUIx73IJw-a_vAC-I1FBafTD1WBZcDVQg_xW&spc=qtApAfKXTQaLFe5Lb-sWaSDrZVSflcoeXLlGY1UAsk401P3hDTe3sYPyUngP&vprv=1&svpuc=1&mime=video%2Fwebm&ns=LM3w1_eMOoCMIfvhTnwb2BQQ&rqh=1&gir=yes&clen=358630377&dur=269.727&lmt=1730570733454621&mt=1730585332&fvip=5&keepalive=yes&fexp=51312688%2C51326932&c=WEB_EMBEDDED_PLAYER&sefc=1&txp=5532434&n=tK63ijfV_FdkX&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AJfQdSswRgIhAPsMx_m8wEG_gFHrVEK95WJOuO_0olvDbZcFHiYOEW2iAiEAtkQ5N_pR2eq1nQtlI4p5zEXs7EEIA9EBanyK6PFWMVw%3D&lsparams=met%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=ACJ0pHgwRQIhAM2AQc3NMTebfAQbzIMZm9lwfzQMXxn7NUoAKjfwJQxzAiA_Cmx7z61pJRlI07sEJeh_ANtCmHM2GMEUMoDvJ74WMw%3D%3D&pot=MnTzqqeGiL40LvOS8qO2zA4oPs9hKB03p_jFCpNuAOAzaPVsQNzkqKOokO8z4cu6Az_afF7dFchYJ_YHINMszhIrrmGEzU7E1sYY-fp78SP5me0kAWQ1nGt5Hgc0NiJZQdUtQMod6_9roD2TTmmLn6xTv1N2Vw==&cpn=" ~ cpn);
+}
+
+
+//copied from yt-dlp
+//todo: extract and evaluate from base.js
+//example: g.Ov=function(a){a=Nv(a);for(var b=[],c=0;c<a.length;c++)b.push("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_".charAt(a[c]&63));return b.join("")};
+//with a being a length, like 16
+string generateClientPlayerNonce()
+{
+    string CPN_ALPHABET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_";
+    return iota(16).map!(e => CPN_ALPHABET[uniform(0, 256) & $ - 1]).to!string;
 }

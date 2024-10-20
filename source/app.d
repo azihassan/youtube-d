@@ -12,7 +12,7 @@ import std.typecons : Yes, No;
 
 import downloaders;
 import helpers;
-import parsers : makeParser, YoutubeFormat, YoutubeVideoURLExtractor;
+import parsers : makeParser, YoutubeFormat, YoutubeVideoURLExtractor, generateClientPlayerNonce;
 import cache : Cache;
 
 pragma(lib, "curl");
@@ -42,6 +42,8 @@ void main(string[] args)
     bool dethrottle = true;
     bool chunked;
     bool displayVersion;
+    string cookieFile;
+    string poToken;
 
     version(linux)
     {
@@ -61,7 +63,9 @@ void main(string[] args)
         "no-cache", "Skip caching of HTML and base.js", &noCache,
         "d|dethrottle", "Attempt to dethrottle download speed by solving the N challenge (defaults to true) (deprecated, will be removed soon)", &dethrottle,
         "no-dethrottle", "Skip N-challenge dethrottling attempt (deprecated, will be removed soon)", () { dethrottle = false; },
-        "version", "Displays youtube-d version", &displayVersion
+        "version", "Displays youtube-d version", &displayVersion,
+        "cookiefile", "Cookie file, required for certain formats", &cookieFile,
+        "potoken", "Proof of origin token, required for certain formats", &poToken
     );
     if(displayVersion)
     {
@@ -97,7 +101,9 @@ void main(string[] args)
                     noProgress,
                     retry > 0 ? true : noCache, //force cache refresh on failure,
                     dethrottle,
-                    chunked
+                    chunked,
+                    cookieFile,
+                    poToken
                 );
                 break;
             }
@@ -117,10 +123,10 @@ void main(string[] args)
     }
 }
 
-void handleURL(string url, int itag, StdoutLogger logger, bool displayFormats, bool outputURL, bool parallel, bool noProgress, bool noCache, bool dethrottle, bool chunked)
+void handleURL(string url, int itag, StdoutLogger logger, bool displayFormats, bool outputURL, bool parallel, bool noProgress, bool noCache, bool dethrottle, bool chunked, string cookieFile, string poToken)
 {
     logger.display(formatTitle("Handling " ~ url));
-    YoutubeVideoURLExtractor parser = Cache(logger, noCache ? Yes.forceRefresh : No.forceRefresh).makeParser(url, itag);
+    YoutubeVideoURLExtractor parser = Cache(logger, cookieFile, poToken, generateClientPlayerNonce(), noCache ? Yes.forceRefresh : No.forceRefresh).makeParser(url, itag);
     logger.displayVerbose("Downloaded video HTML");
     logger.displayVerbose("Attempt to dethrottle : " ~ (dethrottle ? "Yes" : "No"));
     if(!dethrottle)

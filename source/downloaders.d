@@ -50,7 +50,7 @@ class RegularDownloader : Downloader
         http.verbose(logger.verbose);
         auto curl = http.handle();
         ulong length = url.getContentLength(youtubeFormat);
-        logger.display("Length = ", length);
+        logger.displayVerbose("Length = ", length);
         if(destination.exists() && destination.getSize() == length)
         {
             logger.display("Done !".formatSuccess());
