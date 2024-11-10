@@ -14,7 +14,7 @@ import std.zlib : UnCompress;
 import std.json : JSONValue;
 
 import helpers : StdoutLogger, parseID, parseQueryString, parseBaseJSKey, formatTitle, formatSuccess, formatWarning;
-import parsers : parseBaseJSURL, YoutubeVideoURLExtractor, SimpleYoutubeVideoURLExtractor, AdvancedYoutubeVideoURLExtractor, PlayerYoutubeVideoURLExtractor, parseYoutubeConfig;
+import parsers : parseBaseJSURL, YoutubeVideoURLExtractor, SimpleYoutubeVideoURLExtractor, AdvancedYoutubeVideoURLExtractor, EmbeddedSimpleYoutubeVideoURLExtractor, parseYoutubeConfig;
 
 string formatPlayerRequest(string videoId, string poToken, string clientPlayerNonce)
 {
@@ -245,7 +245,7 @@ struct Cache
     {
         if(player != "")
         {
-            return new PlayerYoutubeVideoURLExtractor(html, baseJS, player, poToken, clientPlayerNonce, logger);
+            return new EmbeddedSimpleYoutubeVideoURLExtractor(html, baseJS, player, poToken, clientPlayerNonce, logger);
         }
         immutable urlRegex = ctRegex!`"itag":\d+,"url":"(.*?)"`;
         if(!html.matchFirst(urlRegex).empty)
@@ -421,7 +421,7 @@ unittest
 
 unittest
 {
-    writeln("Given PlayerYoutubeVideoURLExtractor, when cache is fresh, should not download HTML and player".formatTitle());
+    writeln("Given EmbeddedSimpleYoutubeVideoURLExtractor, when cache is fresh, should not download HTML and player".formatTitle());
     scope(success) writeln("OK\n".formatSuccess());
 
     SysTime tomorrow = Clock.currTime() + 1.days;
@@ -445,7 +445,7 @@ unittest
 
 unittest
 {
-    writeln("Given PlayerYoutubeVideoURLExtractor, when cache is stale, should download HTML and player".formatTitle());
+    writeln("Given EmbeddedSimpleYoutubeVideoURLExtractor, when cache is stale, should download HTML and player".formatTitle());
     scope(success) writeln("OK\n".formatSuccess());
 
     //base.js is already available in tests/ so no need to check it
