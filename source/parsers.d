@@ -120,7 +120,7 @@ abstract class YoutubeVideoURLExtractor
     }
 }
 
-abstract class HTMLYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
+abstract class WebYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
 {
     override public void failIfUnplayable()
     {
@@ -163,7 +163,7 @@ abstract class HTMLYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
     }
 }
 
-class SimpleYoutubeVideoURLExtractor : HTMLYoutubeVideoURLExtractor
+class SimpleYoutubeVideoURLExtractor : WebYoutubeVideoURLExtractor
 {
     this(string html, StdoutLogger logger)
     {
@@ -319,7 +319,7 @@ unittest
     assert(YoutubeFormat(140, 9371359, "unknown", `foobar`, [AudioVisual.VIDEO]).extension == "mp4");
 }
 
-class AdvancedYoutubeVideoURLExtractor : HTMLYoutubeVideoURLExtractor
+class AdvancedYoutubeVideoURLExtractor : WebYoutubeVideoURLExtractor
 {
     this(string html, string baseJS, StdoutLogger logger)
     {
@@ -786,7 +786,7 @@ unittest
     assert(expected == actual, expected ~ " != " ~ actual);
 }
 
-class PlayerYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
+class EmbeddedSimpleYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
 {
     private JSONValue json;
     private string clientPlaybackNonce;
@@ -844,8 +844,16 @@ class PlayerYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
 
     override public void failIfUnplayable()
     {
-        //todo add me
-        logger.display("failIfUnplayable not implemented yet for embedded players".formatWarning());
+        if("playabilityStatus" !in this.json)
+        {
+            logger.display("Warning: playability status could not be parsed".formatWarning);
+            return;
+        }
+        auto playabilityStatus = this.json["playabilityStatus"];
+        if(playabilityStatus["status"].str != "OK")
+        {
+            throw new Exception("Video is unplayable because of status " ~ playabilityStatus["status"].str ~ " and reason: " ~ playabilityStatus["reason"].str);
+        }
     }
 
     override public string getTitle()
@@ -863,6 +871,25 @@ class PlayerYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
         return this.json["streamingData"];
     }
 }
+
+unittest
+{
+    import std.exception : collectExceptionMsg;
+    writeln("When embedded video is unplayable, should fail gracefully".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
+
+    string html = readText("tests/cvDVjwMXiCs.html");
+    string baseJS = readText("tests/4e23410d.js");
+    string player = readText("tests/unplayable.json");
+    string cpn = generateClientPlayerNonce();
+    string poToken = "MnTzqqeGiL40LvOS8qO2zA4oPs9hKB03p_jFCpNuAOAzaPVsQNzkqKOokO8z4cu6Az_afF7dFchYJ_YHINMszhIrrmGEzU7E1sYY-fp78SP5me0kAWQ1nGt5Hgc0NiJZQdUtQMod6_9roD2TTmmLn6xTv1N2Vw==";
+
+    string exceptionMessage = collectExceptionMsg(new EmbeddedSimpleYoutubeVideoURLExtractor(html, baseJS, player, poToken, cpn, new StdoutLogger()));
+
+    string expectedExceptionMessage = "Video is unplayable because of status UNPLAYABLE and reason: Video unavailable";
+    assert(exceptionMessage == expectedExceptionMessage, "Expected message " ~ expectedExceptionMessage ~ " but got " ~ exceptionMessage);
+}
+
 unittest
 {
     writeln("When video is embedded, should parse from player JSON response".formatTitle());
@@ -871,7 +898,7 @@ unittest
     string baseJS = readText("tests/4e23410d.js");
     string player = readText("tests/cvDVjwMXiCs.json");
     string cpn = generateClientPlayerNonce();
-    auto extractor = new PlayerYoutubeVideoURLExtractor(html, baseJS, player, "MnTzqqeGiL40LvOS8qO2zA4oPs9hKB03p_jFCpNuAOAzaPVsQNzkqKOokO8z4cu6Az_afF7dFchYJ_YHINMszhIrrmGEzU7E1sYY-fp78SP5me0kAWQ1nGt5Hgc0NiJZQdUtQMod6_9roD2TTmmLn6xTv1N2Vw==", cpn, new StdoutLogger());
+    auto extractor = new EmbeddedSimpleYoutubeVideoURLExtractor(html, baseJS, player, "MnTzqqeGiL40LvOS8qO2zA4oPs9hKB03p_jFCpNuAOAzaPVsQNzkqKOokO8z4cu6Az_afF7dFchYJ_YHINMszhIrrmGEzU7E1sYY-fp78SP5me0kAWQ1nGt5Hgc0NiJZQdUtQMod6_9roD2TTmmLn6xTv1N2Vw==", cpn, new StdoutLogger());
 
     assert(extractor.getID() == "cvDVjwMXiCs");
     assert(extractor.getTitle() == "A Cat Is More Terrifying Than a 200lbs Caucasian Shepherd Dog 😂");
