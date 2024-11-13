@@ -41,17 +41,22 @@ abstract class YoutubeVideoURLExtractor
 
     public string getTitle()
     {
-        return parser.querySelector("meta[name=title]").attr("content").idup;
+        try
+        {
+            JSONValue playerResponse = findInitialPlayerResponse();
+            return playerResponse["videoDetails"]["title"].str;
+        }
+        catch(Exception e)
+        {
+            return "Unknown title";
+        }
+
     }
 
     public string getID()
     {
-        auto meta = parser.querySelector("meta[itemprop=videoId]");
-        if(meta is null)
-        {
-            meta = parser.querySelector("meta[itemprop=identifier]");
-        }
-        return meta.attr("content").idup;
+        JSONValue playerResponse = findInitialPlayerResponse();
+        return playerResponse["videoDetails"]["videoId"].str;
     }
 
     public YoutubeFormat getFormat(int itag)
@@ -108,6 +113,18 @@ abstract class YoutubeVideoURLExtractor
             );
         }
         return formats;
+    }
+
+    protected JSONValue findInitialPlayerResponse()
+    {
+        foreach(script; parser.querySelectorAll("body > script"))
+        {
+            if(script.text.canFind("var ytInitialPlayerResponse = {"))
+            {
+                return script.text.replace("var ytInitialPlayerResponse = ", "").parseJSON();
+            }
+        }
+        throw new Exception("ytInitialPlayerResponse couldn't be parsed, video metadata not found");
     }
 }
 
@@ -380,20 +397,40 @@ unittest
 {
     writeln("Should parse video URL and metadata from VEVO videos".formatTitle());
     scope(success) writeln("OK\n".formatSuccess());
-    string html = readText("tests/dQw4w9WgXcQ.html");
+    string html = readText("tests/dQ.html");
     string baseJS = readText("tests/base.min.js");
     auto extractor = new AdvancedYoutubeVideoURLExtractor(html, baseJS, new StdoutLogger());
 
     assert(extractor.getID() == "dQw4w9WgXcQ");
     assert(extractor.getTitle() == "Rick Astley - Never Gonna Give You Up (Official Music Video)");
 
-    assert(extractor.findSignatureCipher(18) == "s=L%3D%3DgKKNERRt_lv67W%3DvA4fU6N2qzrARSUbfqeXlAL827irDQICgwCLRfLgHEW2t5_GLJtRC-yoiR8sy0JR-uqLLRJlLJbgIQRw8JQ0qO1&sp=sig&url=https://rr2---sn-f5o5-jhod.googlevideo.com/videoplayback%3Fexpire%3D1677997809%26ei%3DkeIDZIHQKMWC1ga62YWIDQ%26ip%3D105.66.0.249%26id%3Do-ADmt4SY6m6445pG7f4G5f72y1NE48ZiWiqWDA9pi6iQo%26itag%3D18%26source%3Dyoutube%26requiressl%3Dyes%26mh%3D7c%26mm%3D31%252C29%26mn%3Dsn-f5o5-jhod%252Csn-h5q7knes%26ms%3Dau%252Crdu%26mv%3Dm%26mvi%3D2%26pl%3D24%26initcwndbps%3D275000%26vprv%3D1%26mime%3Dvideo%252Fmp4%26ns%3DXFlGVko7q0z2CzI9Odw1BvcL%26cnr%3D14%26ratebypass%3Dyes%26dur%3D212.091%26lmt%3D1674233743350828%26mt%3D1677975897%26fvip%3D4%26fexp%3D24007246%26c%3DWEB%26txp%3D4530434%26n%3DTVXfDeJvgqqwQZo%26sparams%3Dexpire%252Cei%252Cip%252Cid%252Citag%252Csource%252Crequiressl%252Cvprv%252Cmime%252Cns%252Ccnr%252Cratebypass%252Cdur%252Clmt%26lsparams%3Dmh%252Cmm%252Cmn%252Cms%252Cmv%252Cmvi%252Cpl%252Cinitcwndbps%26lsig%3DAG3C_xAwRQIgZ_NXvvyuBRfcZ0Jmzc3UY0u4LlHk31riZU2FhqfFR7kCIQC62jB2OlVrTCZrSJ_itMUP5URwKclnuZXzkGCksV9I6g%253D%253D");
+    assert(extractor.findSignatureCipher(18) == "s=%3D%3DQWEzyqIx3ngTN5fz-sonSUm8nJo9XPg0EEqYfnUgQgOBiAI4QV71XuujZ7Zn_YMeTTjj3R1ox9DGiAtIl5PS3xBeKAhIQRw8JQ0qO4O4\u0026sp=sig\u0026url=https://rr3---sn-f5o5-g53e.googlevideo.com/videoplayback%3Fexpire%3D1679282494%26ei%3D3nwXZLInx-RZrbOZgA4%26ip%3D105.67.131.46%26id%3Do-ADzvIi5vgKWgJk-TRxmT6ksUk64mzkUfV-JkvfCVFcLX%26itag%3D18%26source%3Dyoutube%26requiressl%3Dyes%26mh%3D7c%26mm%3D31%252C29%26mn%3Dsn-f5o5-g53e%252Csn-h5qzen7d%26ms%3Dau%252Crdu%26mv%3Dm%26mvi%3D3%26pl%3D24%26initcwndbps%3D132500%26vprv%3D1%26mime%3Dvideo%252Fmp4%26ns%3DN0utzYASQy85glQUKihYARgL%26cnr%3D14%26ratebypass%3Dyes%26dur%3D212.091%26lmt%3D1674233743350828%26mt%3D1679260398%26fvip%3D4%26fexp%3D24007246%26c%3DWEB%26txp%3D4530434%26n%3Dy1f34tdLpsslBu%26sparams%3Dexpire%252Cei%252Cip%252Cid%252Citag%252Csource%252Crequiressl%252Cvprv%252Cmime%252Cns%252Ccnr%252Cratebypass%252Cdur%252Clmt%26lsparams%3Dmh%252Cmm%252Cmn%252Cms%252Cmv%252Cmvi%252Cpl%252Cinitcwndbps%26lsig%3DAG3C_xAwRQIgSCCisEfk5u8_8dBiEjrMAGwGCR0D9yiB2-YiyAAizMACIQD06E3GivtKMmTc-NRuqj6zQbdyfAPxhhUEDZdSg17MkQ%253D%253D");
 
-    assert(extractor.findSignatureCipher(396) == "s=P%3D%3DAi2cZ-qa3KUVLR%3D8ifB5eVi24LUAAtDJdrBXAwub3jYDQICwlGOfArS5Fk6UbM26kHntVmeswXUuJdXq2Rpv0rMIdagIQRw8JQ0qO7&sp=sig&url=https://rr2---sn-f5o5-jhod.googlevideo.com/videoplayback%3Fexpire%3D1677997809%26ei%3DkeIDZIHQKMWC1ga62YWIDQ%26ip%3D105.66.0.249%26id%3Do-ADmt4SY6m6445pG7f4G5f72y1NE48ZiWiqWDA9pi6iQo%26itag%3D396%26aitags%3D133%252C134%252C135%252C136%252C137%252C160%252C242%252C243%252C244%252C247%252C248%252C278%252C394%252C395%252C396%252C397%252C398%252C399%26source%3Dyoutube%26requiressl%3Dyes%26mh%3D7c%26mm%3D31%252C29%26mn%3Dsn-f5o5-jhod%252Csn-h5q7knes%26ms%3Dau%252Crdu%26mv%3Dm%26mvi%3D2%26pl%3D24%26initcwndbps%3D275000%26vprv%3D1%26mime%3Dvideo%252Fmp4%26ns%3DV1YGXTHGUU0a4PsRJqmYKX0L%26gir%3Dyes%26clen%3D5953258%26dur%3D212.040%26lmt%3D1674230525337110%26mt%3D1677975897%26fvip%3D4%26keepalive%3Dyes%26fexp%3D24007246%26c%3DWEB%26txp%3D4537434%26n%3DiRrA3X-4scFA5la%26sparams%3Dexpire%252Cei%252Cip%252Cid%252Caitags%252Csource%252Crequiressl%252Cvprv%252Cmime%252Cns%252Cgir%252Cclen%252Cdur%252Clmt%26lsparams%3Dmh%252Cmm%252Cmn%252Cms%252Cmv%252Cmvi%252Cpl%252Cinitcwndbps%26lsig%3DAG3C_xAwRQIgE-grPIIwKVqUa_siK-FtbLtMME0LPjp9rNlzuvLN7XQCIQCfVt03aw8T9cNgG3u_pFuQafSG4AQeKpgLEHcvodbUjA%253D%253D");
+    assert(extractor.findSignatureCipher(396) == "s=8019W1vNihBw77R7UYPsFG2ap5YLMf1NEASbuqfoQ7DICAgRsJioiZ4T-xS_XxVc4O-uLTjkxB6AeJx97BMkGuFHgIARw8JQ0qO4O4\u0026sp=sig\u0026url=https://rr3---sn-f5o5-g53e.googlevideo.com/videoplayback%3Fexpire%3D1679282494%26ei%3D3nwXZLInx-RZrbOZgA4%26ip%3D105.67.131.46%26id%3Do-ADzvIi5vgKWgJk-TRxmT6ksUk64mzkUfV-JkvfCVFcLX%26itag%3D396%26aitags%3D133%252C134%252C135%252C136%252C137%252C160%252C242%252C243%252C244%252C247%252C248%252C278%252C394%252C395%252C396%252C397%252C398%252C399%26source%3Dyoutube%26requiressl%3Dyes%26mh%3D7c%26mm%3D31%252C29%26mn%3Dsn-f5o5-g53e%252Csn-h5qzen7d%26ms%3Dau%252Crdu%26mv%3Dm%26mvi%3D3%26pl%3D24%26initcwndbps%3D132500%26vprv%3D1%26mime%3Dvideo%252Fmp4%26ns%3DkwEoGNG1jfCHjoMtHo9a3wwL%26gir%3Dyes%26clen%3D5953258%26dur%3D212.040%26lmt%3D1674230525337110%26mt%3D1679260398%26fvip%3D4%26keepalive%3Dyes%26fexp%3D24007246%26c%3DWEB%26txp%3D4537434%26n%3DbWZ8RVMniF-UES%26sparams%3Dexpire%252Cei%252Cip%252Cid%252Caitags%252Csource%252Crequiressl%252Cvprv%252Cmime%252Cns%252Cgir%252Cclen%252Cdur%252Clmt%26lsparams%3Dmh%252Cmm%252Cmn%252Cms%252Cmv%252Cmvi%252Cpl%252Cinitcwndbps%26lsig%3DAG3C_xAwRAIgAMQ1ihzvXdU3bXepnUqzMvjZ31CVR1OJH5lR3xnHUu8CIHCjkIgGlAmEN-YsI5m1WZ-FwATK3CNhr3b1EYRTaKo3");
 
-    assert(extractor.getURL(18) == "https://rr2---sn-f5o5-jhod.googlevideo.com/videoplayback?expire=1677997809&ei=keIDZIHQKMWC1ga62YWIDQ&ip=105.66.0.249&id=o-ADmt4SY6m6445pG7f4G5f72y1NE48ZiWiqWDA9pi6iQo&itag=18&source=youtube&requiressl=yes&mh=7c&mm=31%2C29&mn=sn-f5o5-jhod%2Csn-h5q7knes&ms=au%2Crdu&mv=m&mvi=2&pl=24&initcwndbps=275000&vprv=1&mime=video%2Fmp4&ns=XFlGVko7q0z2CzI9Odw1BvcL&cnr=14&ratebypass=yes&dur=212.091&lmt=1674233743350828&mt=1677975897&fvip=4&fexp=24007246&c=WEB&txp=4530434&n=TVXfDeJvgqqwQZo&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cvprv%2Cmime%2Cns%2Ccnr%2Cratebypass%2Cdur%2Clmt&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=AG3C_xAwRQIgZ_NXvvyuBRfcZ0Jmzc3UY0u4LlHk31riZU2FhqfFR7kCIQC62jB2OlVrTCZrSJ_itMUP5URwKclnuZXzkGCksV9I6g%3D%3D&sig=AOq0QJ8wRQIgbJLlJRLLqu-RJ0ys8Rioy-CRtJLG_5t2WEHgLfRLCwgCIQDri728L1lXeqfbUSRArzq2N6Uf4AvLW76vl_tRRENKKg%3D%3D");
+    assert(extractor.getURL(18) == "https://rr3---sn-f5o5-g53e.googlevideo.com/videoplayback?expire=1679282494&ei=3nwXZLInx-RZrbOZgA4&ip=105.67.131.46&id=o-ADzvIi5vgKWgJk-TRxmT6ksUk64mzkUfV-JkvfCVFcLX&itag=18&source=youtube&requiressl=yes&mh=7c&mm=31%2C29&mn=sn-f5o5-g53e%2Csn-h5qzen7d&ms=au%2Crdu&mv=m&mvi=3&pl=24&initcwndbps=132500&vprv=1&mime=video%2Fmp4&ns=N0utzYASQy85glQUKihYARgL&cnr=14&ratebypass=yes&dur=212.091&lmt=1674233743350828&mt=1679260398&fvip=4&fexp=24007246&c=WEB&txp=4530434&n=y1f34tdLpsslBu&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cvprv%2Cmime%2Cns%2Ccnr%2Cratebypass%2Cdur%2Clmt&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=AG3C_xAwRQIgSCCisEfk5u8_8dBiEjrMAGwGCR0D9yiB2-YiyAAizMACIQD06E3GivtKMmTc-NRuqj6zQbdyfAPxhhUEDZdSg17MkQ%3D%3D&sig=UO4Oq0QJ8wRQIhAKeBx3SP5lItAiGD9xo1R3jjTTeMY_nZ7ZjuuX17VQ4IAiBOgQg4nfYqEE0gPX9oJn8mUSnos-%3Df5NTgn3xIqyzEWQ%3D");
 
-    assert(extractor.getURL(396) == "https://rr2---sn-f5o5-jhod.googlevideo.com/videoplayback?expire=1677997809&ei=keIDZIHQKMWC1ga62YWIDQ&ip=105.66.0.249&id=o-ADmt4SY6m6445pG7f4G5f72y1NE48ZiWiqWDA9pi6iQo&itag=396&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&mh=7c&mm=31%2C29&mn=sn-f5o5-jhod%2Csn-h5q7knes&ms=au%2Crdu&mv=m&mvi=2&pl=24&initcwndbps=275000&vprv=1&mime=video%2Fmp4&ns=V1YGXTHGUU0a4PsRJqmYKX0L&gir=yes&clen=5953258&dur=212.040&lmt=1674230525337110&mt=1677975897&fvip=4&keepalive=yes&fexp=24007246&c=WEB&txp=4537434&n=iRrA3X-4scFA5la&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Cvprv%2Cmime%2Cns%2Cgir%2Cclen%2Cdur%2Clmt&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=AG3C_xAwRQIgE-grPIIwKVqUa_siK-FtbLtMME0LPjp9rNlzuvLN7XQCIQCfVt03aw8T9cNgG3u_pFuQafSG4AQeKpgLEHcvodbUjA%3D%3D&sig=AOq0QJ8wRQIgadIMr0vpR2qXdJuUXwsemVtnHk62MbU6kF5SrAfOGlwCIQDYj3buw7XBrdJDtAAUL42iVe5Bfi8PRLVUK3aq-Zc2iA%3D%3D");
+    assert(extractor.getURL(396) == "https://rr3---sn-f5o5-g53e.googlevideo.com/videoplayback?expire=1679282494&ei=3nwXZLInx-RZrbOZgA4&ip=105.67.131.46&id=o-ADzvIi5vgKWgJk-TRxmT6ksUk64mzkUfV-JkvfCVFcLX&itag=396&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399&source=youtube&requiressl=yes&mh=7c&mm=31%2C29&mn=sn-f5o5-g53e%2Csn-h5qzen7d&ms=au%2Crdu&mv=m&mvi=3&pl=24&initcwndbps=132500&vprv=1&mime=video%2Fmp4&ns=kwEoGNG1jfCHjoMtHo9a3wwL&gir=yes&clen=5953258&dur=212.040&lmt=1674230525337110&mt=1679260398&fvip=4&keepalive=yes&fexp=24007246&c=WEB&txp=4537434&n=bWZ8RVMniF-UES&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Cvprv%2Cmime%2Cns%2Cgir%2Cclen%2Cdur%2Clmt&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=AG3C_xAwRAIgAMQ1ihzvXdU3bXepnUqzMvjZ31CVR1OJH5lR3xnHUu8CIHCjkIgGlAmEN-YsI5m1WZ-FwATK3CNhr3b1EYRTaKo3&sig=uO4Oq0QJ8wRAIgHFuGkMB79xJeA6BxkjTLu-O4cVxX_Sx-T4ZioiJsRgACID7Qofq4bSAEN1fMLY5pa2GFsP8U7R77wBhiNv1W910");
+}
+
+unittest
+{
+    writeln("Should parse video URL and metadata from VEVO videos with iOS mweb client".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
+    string html = readText("tests/dQw4w9WgXcQ-mweb.html");
+    string baseJS = readText("tests/28f14d97-mweb.js");
+    auto extractor = new AdvancedYoutubeVideoURLExtractor(html, baseJS, new StdoutLogger());
+
+    assert(extractor.getID() == "dQw4w9WgXcQ");
+    assert(extractor.getTitle() == "Rick Astley - Never Gonna Give You Up (Official Music Video)");
+
+    string actual = extractor.getURL(18, true);
+    string expected = "https://rr1---sn-f5o5-jhol.googlevideo.com/videoplayback?expire=1731477559&ei=1-szZ7WoFfzBmLAP1u2p0Qk&ip=105.66.6.233&id=o-AEIgOfHGkI-fXTH-2KEs-Na0RS_o_2dO5HPL4jPiOpTA&itag=18&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&met=1731455959%2C&mh=7c&mm=31%2C29&mn=sn-f5o5-jhol%2Csn-h5qzen7d&ms=au%2Crdu&mv=m&mvi=1&pl=24&rms=au%2Cau&initcwndbps=340000&bui=AQn3pFQRD6UEONxpMtwptRDH9UWbUmZzU92PKN5aSQN32_Z2fUNC4MgW3BcnnPD2mUHYNichQTJ45Sk3&spc=qtApATlplmnedCoPrEiEKhkvzjTXfVqGJ1K7ksgPTmtGl0SimkV-1NI_220GZ8w&vprv=1&svpuc=1&mime=video%2Fmp4&ns=KrfT2EKC5cx1mSVnPNOk4k8Q&rqh=1&cnr=14&ratebypass=yes&dur=212.091&lmt=1717051812678016&mt=1731455571&fvip=4&fexp=51299154%2C51312688%2C51326932&c=MWEB&sefc=1&txp=4538434&n=xzB66wJdQ76DIQ&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Ccnr%2Cratebypass%2Cdur%2Clmt&lsparams=met%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=AGluJ3MwRQIgchTTEAqbG2HruzLKh_4RHgpQCMu_zZt36i4PO6jmyp4CIQCkxUdX0QEQSlIvLPd_u-nGrcYQmP3UlfIcvEF7CgxgIg%3D%3D&sig=AJfQdSswRQIhANNyxFQL5GdStTbtnoQjriHR11DojPVbYrjkWnUNmbbgAiBqAY0JAQi079nqygYufsAzzxMCSg2TTETtbKZBBAPScg%3D%3D";
+    assert(actual == expected, "Expected " ~ expected ~ "\nBut received " ~ actual);
+
+    actual = extractor.getURL(396, true);
+    expected = "https://rr1---sn-f5o5-jhol.googlevideo.com/videoplayback?expire=1731477559&ei=1-szZ7WoFfzBmLAP1u2p0Qk&ip=105.66.6.233&id=o-AEIgOfHGkI-fXTH-2KEs-Na0RS_o_2dO5HPL4jPiOpTA&itag=396&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278%2C394%2C395%2C396%2C397%2C398%2C399%2C597%2C598&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&met=1731455959%2C&mh=7c&mm=31%2C29&mn=sn-f5o5-jhol%2Csn-h5qzen7d&ms=au%2Crdu&mv=m&mvi=1&pl=24&rms=au%2Cau&initcwndbps=340000&bui=AQn3pFRddAkdx8J1YF-gzGXsSLJ8T9sxKLW5ttqePQpSkHD1MEfXOxGCUU5Meg3s5Y0WgLNaVCvWCEO3&spc=qtApATlqlmnedCoPrEiEKhkvzjTXfVqGJ1K7ksgPTmtGl0SimkV-1NI_210D&vprv=1&svpuc=1&mime=video%2Fmp4&ns=vDTOPzFfo0i0NFc4ZQZA4KsQ&rqh=1&gir=yes&clen=5083621&dur=212.040&lmt=1717048855386476&mt=1731455571&fvip=4&keepalive=yes&fexp=51299154%2C51312688%2C51326932&c=MWEB&sefc=1&txp=4537434&n=HWC7SQ_qss_Upg&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&lsparams=met%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=AGluJ3MwRQIgchTTEAqbG2HruzLKh_4RHgpQCMu_zZt36i4PO6jmyp4CIQCkxUdX0QEQSlIvLPd_u-nGrcYQmP3UlfIcvEF7CgxgIg%3D%3D&sig=AJfQdSswRQIhAOtma5L9ftuQ-jW_TT6rJjSCogycrQHcFjMG8c5eef4-AiB1XDDRUtiWZ3nqOiKF5z4Mb1jdU6ZTiedpEDBpTp0n3A%3D%3D";
+    assert(actual == expected, "Expected " ~ expected ~ "\nBut received " ~ actual);
 }
 
 YoutubeVideoURLExtractor makeParser(string html, StdoutLogger logger)

@@ -34,6 +34,7 @@ struct Cache
             curl.set(CurlOption.url, url);
             curl.set(CurlOption.encoding, "deflate, gzip");
             curl.set(CurlOption.followlocation, true);
+            curl.set(CurlOption.useragent, "com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)");
 
             curl.onReceive = (ubyte[] chunk) {
                 result ~= chunk.map!(to!(const(char))).to!string;

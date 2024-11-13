@@ -11,7 +11,7 @@ ulong getContentLength(string url)
 {
     auto http = HTTP(url);
     http.method = HTTP.Method.head;
-    http.addRequestHeader("User-Agent", "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:95.0) Gecko/20100101 Firefox/95.0");
+    http.addRequestHeader("User-Agent", "com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)");
     http.perform();
     if(http.statusLine.code >= 400)
     {
