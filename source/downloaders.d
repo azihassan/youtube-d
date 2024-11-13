@@ -57,7 +57,7 @@ class RegularDownloader : Downloader
 
         auto file = File(destination, "ab");
         curl.set(CurlOption.url, url);
-        curl.set(CurlOption.useragent, "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:95.0) Gecko/20100101 Firefox/95.0");
+        curl.set(CurlOption.useragent, "com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)");
         curl.set(CurlOption.referer, referer);
         curl.set(CurlOption.followlocation, true);
         curl.set(CurlOption.failonerror, true);
