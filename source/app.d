@@ -59,8 +59,8 @@ void main(string[] args)
         "v|verbose", "Display debugging messages", &verbose,
         "no-progress", "Don't display real-time progress", &noProgress,
         "no-cache", "Skip caching of HTML and base.js", &noCache,
-        "d|dethrottle", "Attempt to dethrottle download speed by solving the N challenge (defaults to true)", &dethrottle,
-        "no-dethrottle", "Skip N-challenge dethrottling attempt", () { dethrottle = false; },
+        "d|dethrottle", "Attempt to dethrottle download speed by solving the N challenge (defaults to true) (deprecated, will be removed soon)", &dethrottle,
+        "no-dethrottle", "Skip N-challenge dethrottling attempt (deprecated, will be removed soon)", () { dethrottle = false; },
         "version", "Displays youtube-d version", &displayVersion
     );
     if(displayVersion)
@@ -123,6 +123,10 @@ void handleURL(string url, int itag, StdoutLogger logger, bool displayFormats, b
     YoutubeVideoURLExtractor parser = Cache(logger, noCache ? Yes.forceRefresh : No.forceRefresh).makeParser(url, itag);
     logger.displayVerbose("Downloaded video HTML");
     logger.displayVerbose("Attempt to dethrottle : " ~ (dethrottle ? "Yes" : "No"));
+    if(!dethrottle)
+    {
+        logger.display("Dethrottling is now mandatory, the --no-dethrottle flag will be removed soon".formatWarning());
+    }
 
     if(displayFormats)
     {
