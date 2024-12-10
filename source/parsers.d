@@ -603,14 +603,19 @@ struct ThrottlingAlgorithm
 
     string findChallengeName()
     {
-        return javascript.matchOrFail!(`(.{3})=function\(a\)\{var b=a.split`, false);
+        return javascript.matchOrFail!(`(.{3})=function\(\w\)\{var \w=\w\.split`, false);
     }
 
     string findChallengeImplementation()
     {
         string challengeName = findChallengeName().escaper().to!string;
         logger.displayVerbose("challenge name : ", challengeName);
-        return javascript.matchOrFail(challengeName ~ `=function\(a\)\{((.|\s)+?)return b\.join\(""\)\};`).strip();
+        return javascript.matchOrFail(challengeName ~ `=(function\(\w\)\{(.|\s)+?)\.join\(""\)\};`).strip();
+    }
+
+    string findEarlyExitObjectName(string implementation)
+    {
+        return implementation.matchOrFail(`if\(typeof (\w{3})==="undefined"\)return`);
     }
 
     string solve(string n)
@@ -629,7 +634,18 @@ struct ThrottlingAlgorithm
 
         try
         {
-            string implementation = format!`var descramble = function(a) { %s return b.join("")};`(findChallengeImplementation());
+            string rawImplementation = findChallengeImplementation();
+            string implementation = format!`var descramble = %s.join("")};`(rawImplementation);
+            try
+            {
+                string missingObject = findEarlyExitObjectName(rawImplementation);
+                implementation = format!`var %s=1337;%s`(missingObject, implementation);
+                logger.display("Found missing object: ", missingObject, ", redefining it to 1337");
+            }
+            catch(Exception e)
+            {
+                logger.displayVerbose("No missing object detected, skipping definition");
+            }
             duk_peval_string(context, implementation.toStringz());
             duk_get_global_string(context, "descramble");
             duk_push_string(context, n.toStringz());
@@ -687,6 +703,19 @@ unittest
 
     string expected = "CJ6mFweU_U3YMQ";
     string actual = algorithm.solve("lTCmja7irJFW2HwaD");
+
+    assert(expected == actual, expected ~ " != " ~ actual);
+}
+
+unittest
+{
+    writeln("Should parse challenge in base.js 3bb1f723".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
+    auto algorithm = ThrottlingAlgorithm("tests/3bb1f723.js".readText(), new StdoutLogger());
+    assert(algorithm.findChallengeName() == "bE7", algorithm.findChallengeName() ~ " != bE7");
+
+    string expected = "AV62lAMNaE7dFw";
+    string actual = algorithm.solve("dQHBl4-fgbfRe1kiGG");
 
     assert(expected == actual, expected ~ " != " ~ actual);
 }
