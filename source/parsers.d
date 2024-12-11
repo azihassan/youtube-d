@@ -497,7 +497,7 @@ struct EncryptionAlgorithm
         this.javascript = javascript;
         this.logger = logger;
 
-        string algorithm = javascript.matchOrFail!(`a\s*=\s*a\.split\(""\);\s*((.|\s)*?);\s*return a\.join\(""\)`, false);
+        string algorithm = javascript.matchOrFail!(`\w\s*=\s*\w\.split\(""\);\s*((.|\s)*?);\s*return \w\.join\(""\)`, false);
         logger.displayVerbose("Matched algorithm = ", algorithm);
         string[] steps = algorithm.split(";");
         foreach(step; steps.map!strip)
@@ -542,16 +542,16 @@ struct EncryptionAlgorithm
 
     private void parseStepFunctionNames()
     {
-        logger.displayVerbose("Attempting to match ", `([A-Za-z]{2}):function\(a\)\{a\.reverse\(\)\}`);
-        string flip = javascript.matchOrFail!(`([A-Za-z0-9]{2,}):function\(a\)\{a\.reverse\(\)\}`);
+        logger.displayVerbose("Attempting to match ", `([A-Za-z]{2}):function\(\w\)\{\w\.reverse\(\)\}`);
+        string flip = javascript.matchOrFail!(`([A-Za-z0-9]{2,}):function\(\w\)\{\w\.reverse\(\)\}`);
         logger.displayVerbose("Matched flip = ", flip);
 
-        logger.displayVerbose("Attempting to match removeFromStart ", `([A-Za-z]{2}):function\(a\)\{a\.reverse\(\)\}`);
-        string removeFromStart = javascript.matchOrFail!(`([A-Za-z0-9]{2,}):function\(a,b\)\{a\.splice\(0,b\)\}`);
+        logger.displayVerbose("Attempting to match removeFromStart ", `([A-Za-z]{2}):function\(\w\)\{\w\.reverse\(\)\}`);
+        string removeFromStart = javascript.matchOrFail!(`([A-Za-z0-9]{2,}):function\(\w,\w\)\{\w\.splice\(0,\w\)\}`);
         logger.displayVerbose("Matched removeFromStart = ", removeFromStart);
 
-        logger.displayVerbose("Attempting to match swapFirstCharacterWith ", `([A-Za-z]{2}):function\(a\)\{a\.reverse\(\)\}`);
-        string swapFirstCharacterWith = javascript.matchOrFail!(`([A-Za-z0-9]{2,}):function\(a,b\)\{var c=a\[0\];a\[0\]=a\[b%a\.length\];a\[b%a\.length\]=c\}`);
+        logger.displayVerbose("Attempting to match swapFirstCharacterWith ", `([A-Za-z]{2}):function\(\w\)\{\w\.reverse\(\)\}`);
+        string swapFirstCharacterWith = javascript.matchOrFail!(`([A-Za-z0-9]{2,}):function\(\w,\w\)\{var \w=\w\[0\];\w\[0\]=\w\[\w%\w\.length\];\w\[\w%\w\.length\]=\w\}`);
         logger.displayVerbose("Matched swapFirstCharacterWith = ", swapFirstCharacterWith);
 
         obfuscatedStepFunctionNames[flip] = "flip";
@@ -584,6 +584,15 @@ unittest
     auto algorithm = EncryptionAlgorithm("tests/base.min.js".readText(), new StdoutLogger());
     string signature = algorithm.decrypt("L%3D%3DgKKNERRt_lv67W%3DvA4fU6N2qzrARSUbfqeXlAL827irDQICgwCLRfLgHEW2t5_GLJtRC-yoiR8sy0JR-uqLLRJlLJbgIQRw8JQ0qO1");
     assert(signature == "AOq0QJ8wRQIgbJLlJRLLqu-RJ0ys8Rioy-CRtJLG_5t2WEHgLfRLCwgCIQDri728L1lXeqfbUSRArzq2N6Uf4AvLW76vl_tRRENKKg%3D%3D");
+}
+
+unittest
+{
+    writeln("When video is VEVO song and player is 5b77d519, should correctly decrypt video signature".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
+    auto algorithm = EncryptionAlgorithm("tests/5b77d519.js".readText(), new StdoutLogger());
+    string signature = algorithm.decrypt("AGluJ3MwRQIhAN6vDIopGmP-YxvuE68GP-RycrpgAH5uipJ1MJ_8k1h8AiB3_MMwOBVplfCiUKsL0ImQp6THOKokNqJy1KMN3OjJrg%3D%3D");
+    assert(signature == "AJfQdSswRQIhAJYjCYQh5qbchSl650IN1F0-gbhFoDIuG5ymcQlN4BrZAiAXeiCeF8CN_D4zJh0QKQLgsO7xuF9KKnWfTLNyXelyig%3D%3D");
 }
 
 struct ThrottlingAlgorithm
