@@ -498,7 +498,8 @@ struct EncryptionAlgorithm
         this.logger = logger;
 
         //string algorithm = javascript.matchOrFail!(`\w=\w\.split\(""\);((.|\s)*?);return \w\.join\(""\)`, false);
-        string algorithm = javascript.matchOrFail!(`.=.\.split\(""\);((.|\s)*?);return .\.join\(""\)`, false);
+        enum nonCapturingDelimiterGroup = `(?:""|.*\[\d+\])`; //empty string or pW[5]
+        string algorithm = javascript.matchOrFail!(`.=.\.split\(` ~ nonCapturingDelimiterGroup ~ `\);(.*);return .\.join\(` ~ nonCapturingDelimiterGroup ~ `\)`, false);
         logger.displayVerbose("Matched algorithm = ", algorithm);
         string[] steps = algorithm.split(";");
         foreach(step; steps.map!strip)
@@ -597,6 +598,16 @@ unittest
     auto algorithm = EncryptionAlgorithm("tests/5b77d519.js".readText(), new StdoutLogger());
     string signature = algorithm.decrypt("AIr%3DIr%3DIrg5t2EOs4ZBPETDqTCNkf7vH5D1%3Dnyay7ljoINmBywAEiAOlwos8WCcqQKDOCA5XUorfTmIqe9Y4DYBnBw6MxbIuJAhIgRwsSdQfJJ");
     assert(signature == "AJfQdSswRgIhAJuIbxM6wBnBYD4Y9eqImTJroUX5fCODKQqcCW8sowlOAiEAwyBmNIojl7yaynA1D5Hv7fkNCTqDTEPBZ4sOE2t5grI%3D");
+}
+
+unittest
+{
+    writeln("When video is VEVO song and player is 643afba4, should correctly decrypt video signature".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
+    auto algorithm = EncryptionAlgorithm("tests/643afba4.js".readText(), new StdoutLogger());
+    string actual = algorithm.decrypt("wIeAIeWIevIn2qCF3o_-dozs4AsiBA2qLk65K_qk1af9RaMEP3WEiAhvX2Hr%3Ddmpe_hDeRkbByG0xMfsm3wZt_Hcevx5Cx4uJAhIgRwsSdQfJA");
+    string expected = "AJfQdSswRgIhAJu4xC5xvecH_tZw3msfMx0GyBbkReDh_epmd2rH2XvhAiEA3PEMaR9fa1kq_K56kLqWwBisA4szod-_o3FCq2nIveI%3D";
+    assert(actual == expected, expected ~ " != " ~ actual);
 }
 
 struct ThrottlingAlgorithm
