@@ -605,8 +605,6 @@ struct ThrottlingAlgorithm
 
     string javascript;
     private StdoutLogger logger;
-    string[string] obfuscatedStepFunctionNames;
-    Step[] steps;
 
     this(string javascript, StdoutLogger logger)
     {
@@ -623,12 +621,21 @@ struct ThrottlingAlgorithm
     {
         string challengeName = findChallengeName().escaper().to!string;
         logger.displayVerbose("challenge name : ", challengeName);
-        return javascript.matchOrFail(challengeName ~ `=(function\(\w\)\{(.|\s)+?)\.join\(""\)\};`).strip();
+        return javascript.matchOrFail(challengeName ~ `=(function\(\w\)\{(.|\s)+?)\.join\(.*\)\};`).strip();
     }
 
-    string findEarlyExitObjectName(string implementation)
+    string findEarlyExitCondition(string implementation)
     {
-        return implementation.matchOrFail(`if\(typeof (\w{3})==="undefined"\)return`);
+        return implementation.matchOrFail(`(if\(typeof .*\)return .*;)`);
+    }
+
+    string findGlobalVariable(string javascript)
+    {
+        //currently defined at the start of the file, might change later though
+        //using matchFirst instead of matchOrFail because old base.js files don't have it
+        auto match = javascript.matchFirst(`'use strict';(var .*=.*\.split\(".*"\)),`);
+        return match.empty ? "" : match[1];
+
     }
 
     string solve(string n)
@@ -649,15 +656,21 @@ struct ThrottlingAlgorithm
         {
             string rawImplementation = findChallengeImplementation();
             string implementation = format!`var descramble = %s.join("")};`(rawImplementation);
+            string globalVariable = findGlobalVariable(javascript);
+            if(globalVariable != "")
+            {
+                implementation = globalVariable ~ ";" ~ implementation;
+                logger.displayVerbose("Found global variable, defining it before implementation: " ~ globalVariable);
+            }
             try
             {
-                string missingObject = findEarlyExitObjectName(rawImplementation);
-                implementation = format!`var %s=1337;%s`(missingObject, implementation);
-                logger.display("Found missing object: ", missingObject, ", redefining it to 1337");
+                string earlyExitCondition = findEarlyExitCondition(rawImplementation);
+                logger.displayVerbose("Found early exit condition (", earlyExitCondition, "), removing it");
+                implementation = implementation.replace(earlyExitCondition, "");
             }
             catch(Exception e)
             {
-                logger.displayVerbose("No missing object detected, skipping definition");
+                logger.displayVerbose("No exit condition detected, skipping replacement");
             }
             duk_peval_string(context, implementation.toStringz());
             duk_get_global_string(context, "descramble");
@@ -729,6 +742,20 @@ unittest
 
     string expected = "AV62lAMNaE7dFw";
     string actual = algorithm.solve("dQHBl4-fgbfRe1kiGG");
+
+    assert(expected == actual, expected ~ " != " ~ actual);
+}
+
+
+unittest
+{
+    writeln("Should parse challenge in base.js 643afba4".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
+    auto algorithm = ThrottlingAlgorithm("tests/643afba4.js".readText(), new StdoutLogger());
+    assert(algorithm.findChallengeName() == "qce", algorithm.findChallengeName() ~ " != qce");
+
+    string expected = "og_-7K1fQ-5hMQ";
+    string actual = algorithm.solve("So7m-jC7RrxI3eRZ");
 
     assert(expected == actual, expected ~ " != " ~ actual);
 }
