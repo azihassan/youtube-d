@@ -640,13 +640,33 @@ struct ThrottlingAlgorithm
         return implementation.matchOrFail(`(if\(typeof .*\)return .*;)`);
     }
 
-    string findGlobalVariable(string javascript)
+    string findGlobalVariable()
     {
         //currently defined at the start of the file, might change later though
         //using matchFirst instead of matchOrFail because old base.js files don't have it
-        auto match = javascript.matchFirst(`'use strict';(var .*=.*\.split\(".*"\)),`);
-        return match.empty ? "" : match[1];
+        auto regexes = [
+            ctRegex!(`'use strict';(var .*=.*\.split\(".*"\)),`),
+            ctRegex!(`'use strict';(var .*=\[(?:.|\s)*\"]),`),
+        ];
 
+        //searching in the var declaration section of the JS code
+        //the regex becomes difficult to write when searching through the whole file :/
+        //in the future I might need to evaluate this part with duktaped
+        size_t varDefinitionEndIndex = javascript.indexOf("=function(");
+        if(varDefinitionEndIndex == -1)
+        {
+            varDefinitionEndIndex = javascript.length;
+        }
+
+        foreach(regex; regexes)
+        {
+            auto match = javascript[0 .. varDefinitionEndIndex].matchFirst(regex);
+            if(!match.empty)
+            {
+               return match[1];
+            }
+        }
+        return "";
     }
 
     string solve(string n)
@@ -667,7 +687,7 @@ struct ThrottlingAlgorithm
         {
             string rawImplementation = findChallengeImplementation();
             string implementation = format!`var descramble = %s.join("")};`(rawImplementation);
-            string globalVariable = findGlobalVariable(javascript);
+            string globalVariable = findGlobalVariable();
             if(globalVariable != "")
             {
                 implementation = globalVariable ~ ";" ~ implementation;
@@ -767,6 +787,20 @@ unittest
 
     string expected = "og_-7K1fQ-5hMQ";
     string actual = algorithm.solve("So7m-jC7RrxI3eRZ");
+
+    assert(expected == actual, expected ~ " != " ~ actual);
+}
+
+
+unittest
+{
+    writeln("Should parse challenge in base.js 4fcd6e4a".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
+    auto algorithm = ThrottlingAlgorithm("tests/4fcd6e4a.js".readText(), new StdoutLogger());
+    assert(algorithm.findChallengeName() == "Frb", algorithm.findChallengeName() ~ " != Frb");
+
+    string expected = "lG-0exgkM6bN-g";
+    string actual = algorithm.solve("uj-MEVJQ7YTWzttOd");
 
     assert(expected == actual, expected ~ " != " ~ actual);
 }
