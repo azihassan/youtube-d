@@ -6,7 +6,7 @@ jobs:
   unit_test:
     strategy:
       matrix:
-        os: [ { name: ubuntu-20.04, extension: '' } , { name: windows-2019, extension: '.exe' }, { name: macos-latest, extension: '' } ]
+        os: [ { name: ubuntu-22.04, extension: '' } , { name: windows-2019, extension: '.exe' }, { name: macos-latest, extension: '' } ]
 
     runs-on: ${{ matrix.os.name }}
 
@@ -33,7 +33,7 @@ jobs:
   console_test:
     strategy:
       matrix:
-        os: [ { name: ubuntu-20.04, command: sh tests/tests.sh, extension: '' } , { name: windows-2019, command: powershell.exe -file tests\tests.ps1, extension: '.exe' }, { name: macos-latest, command: sh tests/tests-macos.sh, extension: '' }]
+        os: [ { name: ubuntu-22.04, command: sh tests/tests.sh, extension: '' } , { name: windows-2019, command: powershell.exe -file tests\tests.ps1, extension: '.exe' }, { name: macos-latest, command: sh tests/tests-macos.sh, extension: '' }]
 
     runs-on: ${{ matrix.os.name }}
     needs: unit_test

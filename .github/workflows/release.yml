@@ -7,7 +7,7 @@ on:
 
 jobs:
   create_release_job:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
     steps:
@@ -27,7 +27,7 @@ jobs:
   upload_release_assets_job:
     strategy:
       matrix:
-        version: [ { os: ubuntu-20.04, suffix: x86_64, extension: '' }, { os: windows-latest, suffix: win64, extension: '.exe' }, { os: macos-latest, suffix: macos, extension: '' }]
+        version: [ { os: ubuntu-22.04, suffix: x86_64, extension: '' }, { os: windows-latest, suffix: win64, extension: '.exe' }, { os: macos-latest, suffix: macos, extension: '' }]
 
     runs-on: ${{ matrix.version.os }}
     needs: create_release_job
