@@ -7,7 +7,7 @@ import std.conv : to;
 import std.array : replace;
 import std.file : readText;
 import std.string : indexOf, format, lastIndexOf, split, strip, toStringz, startsWith;
-import std.regex : ctRegex, matchFirst, escaper;
+import std.regex : regex, ctRegex, matchFirst, escaper;
 import std.algorithm : canFind, filter, reverse, map;
 import std.format : formattedRead;
 
@@ -625,14 +625,40 @@ struct ThrottlingAlgorithm
 
     string findChallengeName()
     {
-        return javascript.matchOrFail!(`(.{3})=function\(\w\)\{var \w=\w\.split`, false);
+        auto regexes = [
+            ctRegex!(`(.{3})=function\(\w\)\{var \w=\w\.split`),
+
+            //efh=function(r){var V=r[Y[14]](Y[19]),...return V[Y[3]](Y[19])};
+            ctRegex!(`(\w{3})=function\(\w+\)\{var \w+=\w\[.+\]\(.+\),(.|\s)+?return .+\(.+\)\};`),
+        ];
+        foreach(regex; regexes)
+        {
+            auto match = javascript.matchFirst(regex);
+            if(!match.empty)
+            {
+               return match[1];
+            }
+        }
+        throw new Exception("Failed to find N param challenge name");
     }
 
     string findChallengeImplementation()
     {
         string challengeName = findChallengeName().escaper().to!string;
         logger.displayVerbose("challenge name : ", challengeName);
-        return javascript.matchOrFail(challengeName ~ `=(function\(\w\)\{(.|\s)+?)\.join\(.*\)\};`).strip();
+        auto regexes = [
+            regex(challengeName ~ `=(function\(\w\)\{(.|\s)+?\.join\(.*\)\};)`),
+            regex(challengeName ~ `=(function\(\w+\)\{var \w+=.+\(.+\)(.|\s)+?return .+\(.+\)\};)`),
+        ];
+        foreach(regex; regexes)
+        {
+            auto match = javascript.matchFirst(regex);
+            if(!match.empty)
+            {
+               return match[1];
+            }
+        }
+        throw new Exception("Failed to find N param challenge name");
     }
 
     string findEarlyExitCondition(string implementation)
@@ -686,7 +712,7 @@ struct ThrottlingAlgorithm
         try
         {
             string rawImplementation = findChallengeImplementation();
-            string implementation = format!`var descramble = %s.join("")};`(rawImplementation);
+            string implementation = format!`var descramble = %s`(rawImplementation);
             string globalVariable = findGlobalVariable();
             if(globalVariable != "")
             {
@@ -801,6 +827,19 @@ unittest
 
     string expected = "lG-0exgkM6bN-g";
     string actual = algorithm.solve("uj-MEVJQ7YTWzttOd");
+
+    assert(expected == actual, expected ~ " != " ~ actual);
+}
+
+unittest
+{
+    writeln("Should parse challenge in base.js 6450230e".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
+    auto algorithm = ThrottlingAlgorithm("tests/6450230e.js".readText(), new StdoutLogger());
+    assert(algorithm.findChallengeName() == "efh", algorithm.findChallengeName() ~ " != efh");
+
+    string expected = "Cn3MWNPkjgFyRg";
+    string actual = algorithm.solve("G_lCLKGEWvaMaqex");
 
     assert(expected == actual, expected ~ " != " ~ actual);
 }
