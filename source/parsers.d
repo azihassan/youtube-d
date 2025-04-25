@@ -6,7 +6,7 @@ import std.typecons : tuple, Tuple;
 import std.conv : to;
 import std.array : replace;
 import std.file : readText;
-import std.string : indexOf, format, lastIndexOf, split, strip, toStringz, startsWith;
+import std.string : indexOf, format, lastIndexOf, split, strip, toStringz, startsWith, join;
 import std.regex : regex, ctRegex, matchFirst, escaper;
 import std.algorithm : canFind, filter, reverse, map;
 import std.format : formattedRead;
@@ -496,90 +496,80 @@ struct EncryptionAlgorithm
     {
         this.javascript = javascript;
         this.logger = logger;
-
-        //string algorithm = javascript.matchOrFail!(`\w=\w\.split\(""\);((.|\s)*?);return \w\.join\(""\)`, false);
-        enum nonCapturingDelimiterGroup = `(?:""|.*\[\d+\])`; //empty string or pW[5]
-        string algorithm = javascript.matchOrFail!(`.=.\.split\(` ~ nonCapturingDelimiterGroup ~ `\);(.*);return .\.join\(` ~ nonCapturingDelimiterGroup ~ `\)`, false);
-        logger.displayVerbose("Matched algorithm = ", algorithm);
-        string[] steps = algorithm.split(";");
-        foreach(step; steps.map!strip)
-        {
-            string functionName = step[step.indexOf('.') + 1 .. step.indexOf('(')];
-            ulong argument = step[step.indexOf(',') + 1 .. step.indexOf(')')].strip().to!ulong;
-            this.steps ~= tuple(functionName, argument);
-        }
-        logger.displayVerbose("Parsed steps : ", this.steps);
-        parseStepFunctionNames();
     }
 
     string decrypt(string signatureCipher)
     {
-        char[] copy = signatureCipher.decodeComponent.dup;
-        foreach(step; steps)
+        string globalVariable = findGlobalVariable(javascript);
+        string encryptionFunction = javascript.matchOrFail!`\w+=(\w+)\(decodeURIComponent\(\w\.s\)\)`();
+        string encryptionFunctionBody = javascript.matchOrFail("(" ~ encryptionFunction ~ `=function\(\w+\)\{(?:.+)\});`);
+        string encryptionObject = parseEncryptionObject(encryptionFunctionBody);
+
+        string[] implementation = [globalVariable, encryptionObject, encryptionFunctionBody];
+
+        duk_context *context = duk_create_heap_default();
+        if(!context)
         {
-            logger.displayVerbose(step);
-            logger.displayVerbose(obfuscatedStepFunctionNames);
-            logger.displayVerbose("before step = ", copy);
-            switch(obfuscatedStepFunctionNames[step[0]])
-            {
-                case "flip":
-                    flip(copy);
-                break;
-
-                case "swapFirstCharacterWith":
-                    swapFirstCharacterWith(copy, step[1]);
-                break;
-
-                case "removeFromStart":
-                    removeFromStart(copy, step[1]);
-                break;
-
-                default:
-                    assert(0);
-            }
-            logger.displayVerbose("after step = ", copy);
+            logger.display("Failed to create a Duktape heap.".formatError());
+            throw new Exception("Failed to decrypt signatureCipher");
         }
-        return copy.encodeComponent.idup;
+
+        scope(exit)
+        {
+            duk_destroy_heap(context);
+        }
+
+        duk_peval_string(context, implementation.join(";").toStringz());
+        duk_get_global_string(context, encryptionFunction.toStringz());
+        duk_push_string(context, signatureCipher.decodeComponent.toStringz());
+        if(duk_pcall(context, 1) != 0)
+        {
+            throw new Exception(duk_safe_to_string(context, -1).to!string);
+        }
+
+        string result = duk_get_string(context, -1).to!string;
+        duk_pop(context);
+        return result.encodeComponent;
+
     }
 
-    private void parseStepFunctionNames()
+    string parseEncryptionObject(string encryptionFunctionBody)
     {
-        logger.displayVerbose("Attempting to match ", `([A-Za-z]{2}):function\(\w\)\{\w\.reverse\(\)\}`);
-        //string flip = javascript.matchOrFail!(`([A-Za-z0-9]{2,}):function\(\w\)\{\w\.reverse\(\)\}`);
-        string flip = javascript.matchOrFail!(`([A-Za-z0-9]{2,}):function\(.\)\{.\.reverse\(\)\}`);
-        logger.displayVerbose("Matched flip = ", flip);
-
-        logger.displayVerbose("Attempting to match removeFromStart ", `([A-Za-z]{2}):function\(\w\)\{\w\.reverse\(\)\}`);
-        //string removeFromStart = javascript.matchOrFail!(`([A-Za-z0-9]{2,}):function\(\w,\w\)\{\w\.splice\(0,\w\)\}`);
-        string removeFromStart = javascript.matchOrFail!(`([A-Za-z0-9]{2,}):function\(.,.\)\{.\.splice\(0,.\)\}`);
-        logger.displayVerbose("Matched removeFromStart = ", removeFromStart);
-
-        logger.displayVerbose("Attempting to match swapFirstCharacterWith ", `([A-Za-z]{2}):function\(\w\)\{\w\.reverse\(\)\}`);
-        //string swapFirstCharacterWith = javascript.matchOrFail!(`([A-Za-z0-9]{2,}):function\(\w,\w\)\{var \w=\w\[0\];\w\[0\]=\w\[\w%\w\.length\];\w\[\w%\w\.length\]=\w\}`);
-        string swapFirstCharacterWith = javascript.matchOrFail!(`([A-Za-z0-9]{2,}):function\(.,.\)\{var .=.\[0\];.\[0\]=.\[.%.\.length\];.\[.%.\.length\]=.\}`);
-        logger.displayVerbose("Matched swapFirstCharacterWith = ", swapFirstCharacterWith);
-
-        obfuscatedStepFunctionNames[flip] = "flip";
-        obfuscatedStepFunctionNames[swapFirstCharacterWith] = "swapFirstCharacterWith";
-        obfuscatedStepFunctionNames[removeFromStart] = "removeFromStart";
+        //function starts with X=X.split("") and ends with return X.join("")
+        //eg: r=r[Y[14]](Y[19]);oV[Y[8]](r,30);oV[Y[8]](r,65);oV[Y[8]](r,2);return r[Y[3]](Y[19])
+        string[] steps = encryptionFunctionBody.split(";");
+        string encryptionObject = steps[1].matchOrFail!`^(\w+)`();
+        return javascript.matchOrFail(`(var ` ~ encryptionObject ~ `=\{(?:.|\s)+?\}\});`);
     }
+}
 
-    private void flip(ref char[] input)
+string findGlobalVariable(string javascript)
+{
+    //currently defined at the start of the file, might change later though
+    //using matchFirst instead of matchOrFail because old base.js files don't have it
+    auto regexes = [
+        ctRegex!(`'use strict';(var .*=.*\.split\(".*"\)),`),
+        ctRegex!(`'use strict';(var .*=\[(?:.|\s)*\"]),`),
+    ];
+
+    //searching in the var declaration section of the JS code
+    //the regex becomes difficult to write when searching through the whole file :/
+    //in the future I might need to evaluate this part with duktaped
+    size_t varDefinitionEndIndex = javascript.indexOf("=function(");
+    if(varDefinitionEndIndex == -1)
     {
-        input.reverse();
+        varDefinitionEndIndex = javascript.length;
     }
 
-    private void swapFirstCharacterWith(ref char[] input, ulong b)
+    foreach(regex; regexes)
     {
-        char tmp = input[0];
-        input[0] = input[b % input.length];
-        input[b % input.length] = tmp;
+        auto match = javascript[0 .. varDefinitionEndIndex].matchFirst(regex);
+        if(!match.empty)
+        {
+           return match[1];
+        }
     }
-
-    private void removeFromStart(ref char[] input, ulong amount)
-    {
-        input = input[amount .. $];
-    }
+    return "";
 }
 
 unittest
@@ -607,6 +597,16 @@ unittest
     auto algorithm = EncryptionAlgorithm("tests/643afba4.js".readText(), new StdoutLogger());
     string actual = algorithm.decrypt("wIeAIeWIevIn2qCF3o_-dozs4AsiBA2qLk65K_qk1af9RaMEP3WEiAhvX2Hr%3Ddmpe_hDeRkbByG0xMfsm3wZt_Hcevx5Cx4uJAhIgRwsSdQfJA");
     string expected = "AJfQdSswRgIhAJu4xC5xvecH_tZw3msfMx0GyBbkReDh_epmd2rH2XvhAiEA3PEMaR9fa1kq_K56kLqWwBisA4szod-_o3FCq2nIveI%3D";
+    assert(actual == expected, expected ~ " != " ~ actual);
+}
+
+unittest
+{
+    writeln("When video is VEVO song and player is 6450230e, should correctly decrypt video signature".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
+    auto algorithm = EncryptionAlgorithm("tests/6450230e.js".readText(), new StdoutLogger());
+    string actual = algorithm.decrypt("7JAQdSswRQIgTFkcmxRGlqPV7JpWHmq87SG4mDkD-dcSLKIcRReLNAMCIQCQv8fJjfJNNkIWlolE0fdqIc8EzfC__Yai7zM__GjMcA%3D%3D");
+    string expected = "AJfQdSswRQIgTFkcmxRGlqPV7JpWHm787SG4mDkD-dcSLKIcRReLNAMCIQCQv8fJjqJNNkIWlolE0fdqIc8EzfC__Yai7zM__GjMcA%3D%3D";
     assert(actual == expected, expected ~ " != " ~ actual);
 }
 
@@ -666,35 +666,6 @@ struct ThrottlingAlgorithm
         return implementation.matchOrFail(`(if\(typeof .*\)return .*;)`);
     }
 
-    string findGlobalVariable()
-    {
-        //currently defined at the start of the file, might change later though
-        //using matchFirst instead of matchOrFail because old base.js files don't have it
-        auto regexes = [
-            ctRegex!(`'use strict';(var .*=.*\.split\(".*"\)),`),
-            ctRegex!(`'use strict';(var .*=\[(?:.|\s)*\"]),`),
-        ];
-
-        //searching in the var declaration section of the JS code
-        //the regex becomes difficult to write when searching through the whole file :/
-        //in the future I might need to evaluate this part with duktaped
-        size_t varDefinitionEndIndex = javascript.indexOf("=function(");
-        if(varDefinitionEndIndex == -1)
-        {
-            varDefinitionEndIndex = javascript.length;
-        }
-
-        foreach(regex; regexes)
-        {
-            auto match = javascript[0 .. varDefinitionEndIndex].matchFirst(regex);
-            if(!match.empty)
-            {
-               return match[1];
-            }
-        }
-        return "";
-    }
-
     string solve(string n)
     {
         duk_context *context = duk_create_heap_default();
@@ -713,7 +684,7 @@ struct ThrottlingAlgorithm
         {
             string rawImplementation = findChallengeImplementation();
             string implementation = format!`var descramble = %s`(rawImplementation);
-            string globalVariable = findGlobalVariable();
+            string globalVariable = findGlobalVariable(javascript);
             if(globalVariable != "")
             {
                 implementation = globalVariable ~ ";" ~ implementation;
