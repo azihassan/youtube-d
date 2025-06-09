@@ -630,6 +630,8 @@ struct ThrottlingAlgorithm
 
             //efh=function(r){var V=r[Y[14]](Y[19]),...return V[Y[3]](Y[19])};
             ctRegex!(`(\w{3})=function\(\w+\)\{var \w+=\w\[.+\]\(.+\),(.|\s)+?return .+\(.+\)\};`),
+            //$EK=function(p){var y=p[G[59]](G[11]),...return y[G[54]](G[11])};
+            ctRegex!(`(.{3})=function\(\w+\)\{var \w+=\w\[.+\]\(.+\),(.|\s)+?return .+\(.+\)\};`),
         ];
         foreach(regex; regexes)
         {
@@ -811,6 +813,19 @@ unittest
 
     string expected = "Cn3MWNPkjgFyRg";
     string actual = algorithm.solve("G_lCLKGEWvaMaqex");
+
+    assert(expected == actual, expected ~ " != " ~ actual);
+}
+
+unittest
+{
+    writeln("Should parse challenge in base.js 612f74a3.js".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
+    auto algorithm = ThrottlingAlgorithm("tests/612f74a3.js".readText(), new StdoutLogger());
+    assert(algorithm.findChallengeName() == "$EK", algorithm.findChallengeName() ~ " != $EK");
+
+    string expected = "EQwmx-JXjcErOg";
+    string actual = algorithm.solve("omEUhojTKoiJFceUf");
 
     assert(expected == actual, expected ~ " != " ~ actual);
 }
