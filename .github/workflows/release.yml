@@ -6,38 +6,18 @@ on:
       - 'v*'
 
 jobs:
-  create_release_job:
-    runs-on: ubuntu-22.04
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
-    steps:
-      - uses: actions/checkout@v1
-      - name: Create release
-        uses: actions/create-release@v1
-        id: create_release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref_name }}
-          release_name: New release of youtube-d ${{ github.ref_name }}
-          draft: false
-          prerelease: false
-          body_path: CHANGELOG.md
-
-  upload_release_assets_job:
+  build:
     strategy:
       matrix:
         version: [ { os: ubuntu-22.04, suffix: x86_64, extension: '' }, { os: windows-latest, suffix: win64, extension: '.exe' }, { os: macos-latest, suffix: macos, extension: '' }]
-
     runs-on: ${{ matrix.version.os }}
-    needs: create_release_job
     steps:
       - uses: actions/checkout@v1
 
       - uses: dlang-community/setup-dlang@v1
         name: Install LDC
         with:
-          compiler: ldc-latest
+          compiler: ldc-1.40.0
 
       - name: Build release
         run: dub build -b release --compiler=ldc2
@@ -57,13 +37,49 @@ jobs:
         run: |
           zip youtube-d-${{ matrix.version.suffix }}.zip youtube-d${{ matrix.version.extension }}
 
-      - name: Upload release
-        uses: actions/upload-release-asset@v1
+      - name: Cache build
+        id: cache-build
+        uses: actions/cache/save@v4
+        with:
+          path: youtube-d-${{ matrix.version.suffix }}.zip
+          key: youtube-d-${{ matrix.version.suffix }}.zip
+
+  release:
+    runs-on: 'ubuntu-22.04'
+    needs: build
+    steps:
+      - uses: actions/checkout@v1
+
+      - name: Restore cached builds for Linux
+        id: cache-restore-x86_64
+        uses: actions/cache/restore@v4
+        with:
+          path: youtube-d-x86_64.zip
+          key: youtube-d-x86_64.zip
+
+      - name: Restore cached builds for Windows
+        id: cache-restore-win64
+        uses: actions/cache@v4
+        with:
+          path: youtube-d-win64.zip
+          key: youtube-d-win64.zip
+
+      - name: Restore cached builds for MacOS
+        id: cache-restore-macos
+        uses: actions/cache@v4
+        with:
+          path: youtube-d-macos.zip
+          key: youtube-d-macos.zip
+
+      - uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ needs.create_release_job.outputs.upload_url }}
-          asset_path: ./youtube-d-${{ matrix.version.suffix }}.zip
-          asset_name: youtube-d-${{ matrix.version.suffix }}.zip
-          asset_content_type: application/zip
-
+          name: New release of youtube-d ${{ github.ref_name }}
+          draft: true
+          prerelease: false
+          body_path: CHANGELOG.md
+          files: |
+            youtube-d-x86_64.zip
+            youtube-d-win64.zip
+            youtube-d-macos.zip

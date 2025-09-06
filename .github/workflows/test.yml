@@ -6,7 +6,7 @@ jobs:
   unit_test:
     strategy:
       matrix:
-        os: [ { name: ubuntu-22.04, extension: '' } , { name: windows-2019, extension: '.exe' }, { name: macos-latest, extension: '' } ]
+        os: [ { name: windows-latest, extension: '.exe' } ]
 
     runs-on: ${{ matrix.os.name }}
 
@@ -33,7 +33,7 @@ jobs:
   console_test:
     strategy:
       matrix:
-        os: [ { name: ubuntu-22.04, command: sh tests/tests.sh, extension: '' } , { name: windows-2019, command: powershell.exe -file tests\tests.ps1, extension: '.exe' }, { name: macos-latest, command: sh tests/tests-macos.sh, extension: '' }]
+        os: [ { name: ubuntu-22.04, command: sh tests/tests.sh, extension: '' } , { name: windows-latest, command: powershell.exe -file tests\tests.ps1, extension: '.exe' }, { name: macos-latest, command: sh tests/tests-macos.sh, extension: '' }]
 
     runs-on: ${{ matrix.os.name }}
     needs: unit_test
@@ -49,7 +49,7 @@ jobs:
         key: youtube-d-${{ matrix.os.name }}
 
     - name: Download libcurl.dll
-      if: matrix.os.name == 'windows-2019'
+      if: matrix.os.name == 'windows-latest'
       run: |
         curl -LO https://downloads.dlang.org/other/libcurl-7.68.0-WinSSL-zlib-x86-x64.zip
         tar -xf libcurl-7.68.0-WinSSL-zlib-x86-x64.zip
