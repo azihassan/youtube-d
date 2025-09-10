@@ -10,7 +10,7 @@ Run `youtube-d -h` to display a usage guide.
 
 ```bash
 $ youtube-d -h
-Youtube downloader v0.0.5
+Youtube downloader v0.0.6
 -f                 Format to download (see -F for available formats)
 -F                 List available formats
 -o    --output-url Display extracted video URL without downloading it
@@ -19,11 +19,10 @@ Youtube downloader v0.0.5
 -v       --verbose Display debugging messages
      --no-progress Don't display real-time progress
         --no-cache Skip caching of HTML and base.js
--d    --dethrottle Attempt to dethrottle download speed by solving the N challenge (defaults to true)
-   --no-dethrottle Skip N-challenge dethrottling attempt
+-d    --dethrottle Attempt to dethrottle download speed by solving the N challenge (defaults to true) (deprecated, will be removed soon)
+   --no-dethrottle Skip N-challenge dethrottling attempt (deprecated, will be removed soon)
          --version Displays youtube-d version
 -h          --help This help information.
-
 ```
 
 ## Demo on asciinema

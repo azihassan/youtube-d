@@ -17,7 +17,7 @@ import cache : Cache;
 
 pragma(lib, "curl");
 
-enum VERSION = "0.0.5";
+enum VERSION = "0.0.6";
 
 version(linux)
 {
