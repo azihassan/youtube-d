@@ -37,12 +37,11 @@ jobs:
         run: |
           zip youtube-d-${{ matrix.version.suffix }}.zip youtube-d${{ matrix.version.extension }}
 
-      - name: Cache build
-        id: cache-build
-        uses: actions/cache/save@v4
+      - name: Store build as artifact
+        uses: actions/upload-artifact@v4
         with:
           path: youtube-d-${{ matrix.version.suffix }}.zip
-          key: youtube-d-${{ matrix.version.suffix }}.zip
+          name: youtube-d-${{ matrix.version.suffix }}.zip
 
   release:
     runs-on: 'ubuntu-22.04'
@@ -50,26 +49,12 @@ jobs:
     steps:
       - uses: actions/checkout@v1
 
-      - name: Restore cached builds for Linux
-        id: cache-restore-x86_64
-        uses: actions/cache/restore@v4
+      - name: Downloads builds from previous job
+        uses: actions/download-artifact@v5
         with:
-          path: youtube-d-x86_64.zip
-          key: youtube-d-x86_64.zip
-
-      - name: Restore cached builds for Windows
-        id: cache-restore-win64
-        uses: actions/cache@v4
-        with:
-          path: youtube-d-win64.zip
-          key: youtube-d-win64.zip
-
-      - name: Restore cached builds for MacOS
-        id: cache-restore-macos
-        uses: actions/cache@v4
-        with:
-          path: youtube-d-macos.zip
-          key: youtube-d-macos.zip
+          pattern: youtube-d-*.zip
+          path: .
+          merge-multiple: true
 
       - uses: softprops/action-gh-release@v2
         env:
