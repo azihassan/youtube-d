@@ -632,6 +632,7 @@ struct ThrottlingAlgorithm
             ctRegex!(`(\w{3})=function\(\w+\)\{var \w+=\w\[.+\]\(.+\),(.|\s)+?return .+\(.+\)\};`),
             //$EK=function(p){var y=p[G[59]](G[11]),...return y[G[54]](G[11])};
             ctRegex!(`(.{3})=function\(\w+\)\{var \w+=\w\[.+\]\(.+\),(.|\s)+?return .+\(.+\)\};`),
+            ctRegex!(`var \w{3}=\[(\w{3})\]`),
         ];
         foreach(regex; regexes)
         {
@@ -644,28 +645,20 @@ struct ThrottlingAlgorithm
         throw new Exception("Failed to find N param challenge name");
     }
 
-    string findChallengeImplementation()
+    string injectFakes(string javascript)
     {
-        string challengeName = findChallengeName().escaper().to!string;
-        logger.displayVerbose("challenge name : ", challengeName);
-        auto regexes = [
-            regex(challengeName ~ `=(function\(\w\)\{(.|\s)+?\.join\(.*\)\};)`),
-            regex(challengeName ~ `=(function\(\w+\)\{var \w+=.+\(.+\)(.|\s)+?return .+\(.+\)\};)`),
-        ];
-        foreach(regex; regexes)
-        {
-            auto match = javascript.matchFirst(regex);
-            if(!match.empty)
-            {
-               return match[1];
-            }
-        }
-        throw new Exception("Failed to find N param challenge name");
+        return `var document = { }; var navigator = { }; 
+        var WINDOW = {
+                  "location": {
+                            "hostname": ''
+                          },
+        };
+        function XMLHttpRequest() { }` ~ javascript.replace("window.location.hostname", "WINDOW.location.hostname");
     }
 
-    string findEarlyExitCondition(string implementation)
+    string injectDescrambleFunction(string javascript, string challengeName, string n)
     {
-        return implementation.matchOrFail(`(if\(typeof .*\)return .*;)`);
+        return javascript.replace("})(_yt_player);", "descramble=" ~ challengeName ~ "})(_yt_player);") ~ "var descrambled = descramble('" ~ n ~ "');";
     }
 
     string solve(string n)
@@ -684,33 +677,17 @@ struct ThrottlingAlgorithm
 
         try
         {
-            string rawImplementation = findChallengeImplementation();
-            string implementation = format!`var descramble = %s`(rawImplementation);
-            string globalVariable = findGlobalVariable(javascript);
-            if(globalVariable != "")
-            {
-                implementation = globalVariable ~ ";" ~ implementation;
-                logger.displayVerbose("Found global variable, defining it before implementation: " ~ globalVariable);
-            }
-            try
-            {
-                string earlyExitCondition = findEarlyExitCondition(rawImplementation);
-                logger.displayVerbose("Found early exit condition (", earlyExitCondition, "), removing it");
-                implementation = implementation.replace(earlyExitCondition, "");
-            }
-            catch(Exception e)
-            {
-                logger.displayVerbose("No exit condition detected, skipping replacement");
-            }
-            duk_peval_string(context, implementation.toStringz());
-            duk_get_global_string(context, "descramble");
-            duk_push_string(context, n.toStringz());
-            if(duk_pcall(context, 1) != 0)
+            string challengeName = findChallengeName();
+            string modifiedJavascript = injectFakes(javascript);
+            modifiedJavascript = injectDescrambleFunction(modifiedJavascript, challengeName, n);
+
+            if(0 != duk_peval_string(context, modifiedJavascript.toStringz()))
             {
                 throw new Exception(duk_safe_to_string(context, -1).to!string);
             }
-
+            duk_get_global_string(context, "descrambled");
             string result = duk_get_string(context, -1).to!string;
+            logger.display("Solved N: ", result);
             duk_pop(context);
             return result;
         }
@@ -826,6 +803,19 @@ unittest
 
     string expected = "EQwmx-JXjcErOg";
     string actual = algorithm.solve("omEUhojTKoiJFceUf");
+
+    assert(expected == actual, expected ~ " != " ~ actual);
+}
+
+unittest
+{
+    writeln("Should parse challenge in base.js a61444a1.js".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
+    auto algorithm = ThrottlingAlgorithm("tests/a61444a1.js".readText(), new StdoutLogger());
+    assert(algorithm.findChallengeName() == "wBF", algorithm.findChallengeName() ~ " != wBF");
+
+    string expected = "COPjko6B96qp8w";
+    string actual = algorithm.solve("f_sfmyVVVeUZxuvx");
 
     assert(expected == actual, expected ~ " != " ~ actual);
 }
