@@ -7,7 +7,7 @@ import std.conv : to;
 import std.array : replace;
 import std.file : readText;
 import std.string : indexOf, format, lastIndexOf, split, strip, toStringz, startsWith, join;
-import std.regex : regex, ctRegex, matchFirst, escaper;
+import std.regex : regex, ctRegex, matchFirst, escaper, replaceAll;
 import std.algorithm : canFind, filter, reverse, map;
 import std.format : formattedRead;
 
@@ -661,6 +661,12 @@ struct ThrottlingAlgorithm
         return javascript.replace("})(_yt_player);", "descramble=" ~ challengeName ~ "})(_yt_player);") ~ "var descrambled = descramble('" ~ n ~ "');";
     }
 
+    string desugarReflectConstruct(string javascript)
+    {
+        auto reflectConstructRegex = ctRegex!`Reflect.construct\(\w+,\[\],function\(\)\{\}\)`;
+        return javascript.replaceAll(reflectConstructRegex, "new function(){}");
+    }
+
     string solve(string n)
     {
         duk_context *context = duk_create_heap_default();
@@ -679,6 +685,7 @@ struct ThrottlingAlgorithm
         {
             string challengeName = findChallengeName();
             string modifiedJavascript = injectFakes(javascript);
+            modifiedJavascript = desugarReflectConstruct(modifiedJavascript);
             modifiedJavascript = injectDescrambleFunction(modifiedJavascript, challengeName, n);
 
             if(0 != duk_peval_string(context, modifiedJavascript.toStringz()))
