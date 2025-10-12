@@ -7,7 +7,7 @@ import std.conv : to;
 import std.array : replace;
 import std.file : readText;
 import std.string : indexOf, format, lastIndexOf, split, strip, toStringz, startsWith, join;
-import std.regex : regex, ctRegex, matchFirst, escaper, replaceAll;
+import std.regex : regex, ctRegex, matchFirst, escaper, replaceAll, Captures;
 import std.algorithm : canFind, filter, reverse, map;
 import std.format : formattedRead;
 
@@ -498,15 +498,54 @@ struct EncryptionAlgorithm
         this.logger = logger;
     }
 
+    string findChallenge()
+    {
+        auto regexes = [
+            //Nta(decodeURIComponent(h.s))
+            ctRegex!`(\w+\(decodeURIComponent\(\w+\.s\)\))`,
+            //Fp(3,decodeURIComponent(P.s))
+            ctRegex!`=(\w+\(\d+,decodeURIComponent\(\w+\.s\)\))`,
+        ];
+        foreach(regex; regexes)
+        {
+            auto match = javascript.matchFirst(regex);
+            if(!match.empty)
+            {
+               return match[1];
+            }
+        }
+        throw new Exception("Failed to find N param challenge name");
+    }
+
+    string injectFakes(string javascript)
+    {
+        return `var document = { }; var navigator = { }; 
+        var WINDOW = {
+                  "location": {
+                            "hostname": ''
+                          },
+        };
+        function XMLHttpRequest() { }` ~ javascript.replace("window.location.hostname", "WINDOW.location.hostname");
+    }
+
+    string injectDescrambleFunction(string javascript, string challengeName, string s)
+    {
+        return javascript.replace("})(_yt_player);", "descramble=" ~ challengeName ~ "})(_yt_player);") ~ "var descrambled = encodeURIComponent(descramble(decodeURIComponent('" ~ s ~ "')));";
+    }
+
+    string injectDescrambleFunction(string javascript, string challengeName, string firstArgument, string s)
+    {
+        return javascript.replace("})(_yt_player);", "descramble=" ~ challengeName ~ "})(_yt_player);") ~ "var descrambled = encodeURIComponent(descramble(" ~ firstArgument ~ ", decodeURIComponent('" ~ s ~ "')));";
+    }
+
+    string desugarReflectConstruct(string javascript)
+    {
+        auto reflectConstructRegex = ctRegex!`Reflect.construct\(\w+,\[\],function\(\)\{\}\)`;
+        return javascript.replaceAll(reflectConstructRegex, "new function(){}");
+    }
+
     string decrypt(string signatureCipher)
     {
-        string globalVariable = findGlobalVariable(javascript);
-        string encryptionFunction = javascript.matchOrFail!`\w+=(\w+)\(decodeURIComponent\(\w\.s\)\)`();
-        string encryptionFunctionBody = javascript.matchOrFail("(" ~ encryptionFunction ~ `=function\(\w+\)\{(?:.+)\});`);
-        string encryptionObject = parseEncryptionObject(encryptionFunctionBody);
-
-        string[] implementation = [globalVariable, encryptionObject, encryptionFunctionBody];
-
         duk_context *context = duk_create_heap_default();
         if(!context)
         {
@@ -519,18 +558,39 @@ struct EncryptionAlgorithm
             duk_destroy_heap(context);
         }
 
-        duk_peval_string(context, implementation.join(";").toStringz());
-        duk_get_global_string(context, encryptionFunction.toStringz());
-        duk_push_string(context, signatureCipher.decodeComponent.toStringz());
-        if(duk_pcall(context, 1) != 0)
+        try
         {
-            throw new Exception(duk_safe_to_string(context, -1).to!string);
+            string modifiedJavascript = injectFakes(javascript);
+            modifiedJavascript = desugarReflectConstruct(modifiedJavascript);
+
+            string challenge = findChallenge();
+            string challengeName = challenge.matchOrFail!`(\w+)\(.*?\)`;
+            Captures!string optionalFirstArgument = challenge.matchFirst(ctRegex!`\w+\((\d+),.*\)`);
+            if(optionalFirstArgument.empty)
+            {
+                modifiedJavascript = injectDescrambleFunction(modifiedJavascript, challengeName, signatureCipher);
+            }
+            else
+            {
+                modifiedJavascript = injectDescrambleFunction(modifiedJavascript, challengeName, optionalFirstArgument[1], signatureCipher);
+            }
+
+            if(0 != duk_peval_string(context, modifiedJavascript.toStringz()))
+            {
+                throw new Exception(duk_safe_to_string(context, -1).to!string);
+            }
+            duk_get_global_string(context, "descrambled");
+            string result = duk_get_string(context, -1).to!string;
+            duk_pop(context);
+            return result;
         }
-
-        string result = duk_get_string(context, -1).to!string;
-        duk_pop(context);
-        return result.encodeComponent;
-
+        catch(Exception e)
+        {
+            logger.display(e.message.idup.formatWarning());
+            logger.display("Failed to solve N parameter, downloads might be rate limited".formatWarning());
+            logger.displayVerbose(e.info.to!string.formatWarning());
+            return signatureCipher;
+        }
     }
 
     string parseEncryptionObject(string encryptionFunctionBody)
@@ -823,6 +883,18 @@ unittest
 
     string expected = "COPjko6B96qp8w";
     string actual = algorithm.solve("f_sfmyVVVeUZxuvx");
+
+    assert(expected == actual, expected ~ " != " ~ actual);
+}
+
+unittest
+{
+    writeln("When video is VEVO song, should correctly decrypt video signature".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
+    auto algorithm = EncryptionAlgorithm("tests/29a37ef6.js".readText(), new StdoutLogger());
+
+    string actual = algorithm.decrypt("wIeAIeWIevIn2qCF3o_-dozs4AsiBA2qLk65K_qk1af9RaMEP3WEiAhvX2Hr%3Ddmpe_hDeRkbByG0xMfsm3wZt_Hcevx5Cx4uJAhIgRwsSdQfJA");
+    string expected = "iAIeWIevIn2qCF3o_-dozs4AskBA2qLk65K_qk1af9RaMEP3WEiAhvXHer%3Ddmpe_hDeR2bByG0xMfsm3wZt_Hcevx5Cx4uJAhIgRwsSdQfJA";
 
     assert(expected == actual, expected ~ " != " ~ actual);
 }
