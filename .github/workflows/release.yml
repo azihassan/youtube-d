@@ -9,7 +9,17 @@ jobs:
   build:
     strategy:
       matrix:
-        version: [ { os: ubuntu-22.04, suffix: x86_64, extension: '' }, { os: windows-latest, suffix: win64, extension: '.exe' }, { os: macos-latest, suffix: macos, extension: '' }]
+        version:
+          os:
+            - name: ubuntu-22.04
+              suffix: x86_64
+              extension: 
+            - name: windows-latest
+              suffix: win64
+              extension: .exe
+            - name: macos-latest
+              suffix: macos
+              extension: 
     runs-on: ${{ matrix.version.os }}
     steps:
       - uses: actions/checkout@v1
