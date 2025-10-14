@@ -6,8 +6,16 @@ jobs:
   unit_test:
     strategy:
       matrix:
-        os: [ { name: windows-latest, extension: '.exe' } ]
-
+        os:
+          - name: ubuntu-22.04
+            extension: 
+            compiler: ldc-1.40
+          - name: windows-latest
+            extension: .exe
+            compiler: ldc-1.40
+          - name: macos-latest
+            extension: 
+            compiler: ldc-1.41.0
     runs-on: ${{ matrix.os.name }}
 
     steps:
@@ -16,10 +24,13 @@ jobs:
     - uses: dlang-community/setup-dlang@v1
       name: Install LDC
       with:
-        compiler: ldc-1.40.0
+        compiler: ${{ matrix.compiler }}
 
     - name: Build
       run: dub build
+
+      #- name: Setup tmate session
+      #uses: mxschmitt/action-tmate@v3
 
     - name: Unit tests
       run: dub test --coverage
@@ -33,8 +44,16 @@ jobs:
   console_test:
     strategy:
       matrix:
-        os: [ { name: ubuntu-22.04, command: sh tests/tests.sh, extension: '' } , { name: windows-latest, command: powershell.exe -file tests\tests.ps1, extension: '.exe' }, { name: macos-latest, command: sh tests/tests-macos.sh, extension: '' }]
-
+        os:
+          - name: ubuntu-22.04
+            command: sh tests/tests.sh
+            extension: 
+          - name: windows-latest
+            command: powershell.exe -file tests\tests.ps1
+            extension: .exe
+          - name: macos-latest
+            command: sh tests/tests-macos.sh
+            extension: 
     runs-on: ${{ matrix.os.name }}
     needs: unit_test
     if: false
