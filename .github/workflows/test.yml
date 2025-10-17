@@ -8,23 +8,23 @@ jobs:
       matrix:
         os:
           - name: ubuntu-22.04
-            extension: 
-            compiler: ldc-1.40
+            extension:
+            compiler: ldc-1.40.0
           - name: windows-latest
             extension: .exe
-            compiler: ldc-1.40
+            compiler: ldc-1.40.0
           - name: macos-latest
-            extension: 
+            extension:
             compiler: ldc-1.41.0
     runs-on: ${{ matrix.os.name }}
 
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v4
 
     - uses: dlang-community/setup-dlang@v1
       name: Install LDC
       with:
-        compiler: ${{ matrix.compiler }}
+        compiler: ${{ matrix.os.compiler }}
 
     - name: Build
       run: dub build
@@ -47,19 +47,19 @@ jobs:
         os:
           - name: ubuntu-22.04
             command: sh tests/tests.sh
-            extension: 
+            extension:
           - name: windows-latest
             command: powershell.exe -file tests\tests.ps1
             extension: .exe
           - name: macos-latest
             command: sh tests/tests-macos.sh
-            extension: 
+            extension:
     runs-on: ${{ matrix.os.name }}
     needs: unit_test
     if: false
 
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v4
 
     - uses: actions/cache/restore@v3
       id: cache
@@ -76,4 +76,3 @@ jobs:
 
     - name: e2e tests
       run: ${{ matrix.os.command }}
-

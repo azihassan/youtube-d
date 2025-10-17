@@ -13,50 +13,53 @@ jobs:
           - name: ubuntu-22.04
             suffix: x86_64
             extension: 
+            compiler: ldc-1.40.0
           - name: windows-latest
             suffix: win64
             extension: .exe
+            compiler: ldc-1.40.0
           - name: macos-latest
             suffix: macos
             extension: 
-    runs-on: ${{ matrix.os }}
+            compiler: ldc-1.41.0
+    runs-on: ${{ matrix.os.name }}
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v4
 
       - uses: dlang-community/setup-dlang@v1
         name: Install LDC
         with:
-          compiler: ldc-1.40.0
+          compiler: ${{ matrix.os.compiler }}
 
       - name: Build release
         run: dub build -b release --compiler=ldc2
 
       - name: Prepare assets (Windows)
-        if: matrix.suffix == 'win64'
+        if: matrix.os.suffix == 'win64'
         run: |
           curl -LO https://downloads.dlang.org/other/libcurl-7.68.0-WinSSL-zlib-x86-x64.zip
           tar -xf libcurl-7.68.0-WinSSL-zlib-x86-x64.zip
           xcopy dmd2\windows\bin64\libcurl.dll .
           rm -r dmd2
           rm libcurl-7.68.0-WinSSL-zlib-x86-x64.zip
-          tar cavf youtube-d-${{ matrix.suffix }}.zip youtube-d${{ matrix.extension }} libcurl.dll
+          tar cavf youtube-d-${{ matrix.os.suffix }}.zip youtube-d${{ matrix.os.extension }} libcurl.dll
 
       - name: Prepare assets (Linux or MacOS)
-        if: matrix.suffix == 'x86_64' || matrix.suffix == 'macos'
+        if: matrix.os.suffix == 'x86_64' || matrix.os.suffix == 'macos'
         run: |
-          zip youtube-d-${{ matrix.suffix }}.zip youtube-d${{ matrix.extension }}
+          zip youtube-d-${{ matrix.os.suffix }}.zip youtube-d${{ matrix.os.extension }}
 
       - name: Store build as artifact
         uses: actions/upload-artifact@v4
         with:
-          path: youtube-d-${{ matrix.suffix }}.zip
-          name: youtube-d-${{ matrix.suffix }}.zip
+          path: youtube-d-${{ matrix.os.suffix }}.zip
+          name: youtube-d-${{ matrix.os.suffix }}.zip
 
   release:
     runs-on: 'ubuntu-22.04'
     needs: build
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v4
 
       - name: Downloads builds from previous job
         uses: actions/download-artifact@v5
