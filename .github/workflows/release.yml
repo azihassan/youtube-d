@@ -9,18 +9,17 @@ jobs:
   build:
     strategy:
       matrix:
-        version:
-          os:
-            - name: ubuntu-22.04
-              suffix: x86_64
-              extension: 
-            - name: windows-latest
-              suffix: win64
-              extension: .exe
-            - name: macos-latest
-              suffix: macos
-              extension: 
-    runs-on: ${{ matrix.version.os }}
+        os:
+          - name: ubuntu-22.04
+            suffix: x86_64
+            extension: 
+          - name: windows-latest
+            suffix: win64
+            extension: .exe
+          - name: macos-latest
+            suffix: macos
+            extension: 
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v1
 
@@ -33,25 +32,25 @@ jobs:
         run: dub build -b release --compiler=ldc2
 
       - name: Prepare assets (Windows)
-        if: matrix.version.suffix == 'win64'
+        if: matrix.suffix == 'win64'
         run: |
           curl -LO https://downloads.dlang.org/other/libcurl-7.68.0-WinSSL-zlib-x86-x64.zip
           tar -xf libcurl-7.68.0-WinSSL-zlib-x86-x64.zip
           xcopy dmd2\windows\bin64\libcurl.dll .
           rm -r dmd2
           rm libcurl-7.68.0-WinSSL-zlib-x86-x64.zip
-          tar cavf youtube-d-${{ matrix.version.suffix }}.zip youtube-d${{ matrix.version.extension }} libcurl.dll
+          tar cavf youtube-d-${{ matrix.suffix }}.zip youtube-d${{ matrix.extension }} libcurl.dll
 
       - name: Prepare assets (Linux or MacOS)
-        if: matrix.version.suffix == 'x86_64' || matrix.version.suffix == 'macos'
+        if: matrix.suffix == 'x86_64' || matrix.suffix == 'macos'
         run: |
-          zip youtube-d-${{ matrix.version.suffix }}.zip youtube-d${{ matrix.version.extension }}
+          zip youtube-d-${{ matrix.suffix }}.zip youtube-d${{ matrix.extension }}
 
       - name: Store build as artifact
         uses: actions/upload-artifact@v4
         with:
-          path: youtube-d-${{ matrix.version.suffix }}.zip
-          name: youtube-d-${{ matrix.version.suffix }}.zip
+          path: youtube-d-${{ matrix.suffix }}.zip
+          name: youtube-d-${{ matrix.suffix }}.zip
 
   release:
     runs-on: 'ubuntu-22.04'
