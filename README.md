@@ -10,7 +10,7 @@ Run `youtube-d -h` to display a usage guide.
 
 ```bash
 $ youtube-d -h
-Youtube downloader v0.0.6
+Youtube downloader v0.0.7
 -f                 Format to download (see -F for available formats)
 -F                 List available formats
 -o    --output-url Display extracted video URL without downloading it
