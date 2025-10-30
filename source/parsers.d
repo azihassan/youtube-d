@@ -5,7 +5,7 @@ import std.stdio;
 import std.typecons : tuple, Tuple;
 import std.conv : to;
 import std.array : replace;
-import std.file : readText;
+import std.file : readText, writeText = write;
 import std.string : indexOf, format, lastIndexOf, split, strip, toStringz, startsWith, join;
 import std.regex : regex, ctRegex, matchFirst, escaper, replaceAll, Captures;
 import std.algorithm : canFind, filter, reverse, map;
@@ -504,13 +504,14 @@ struct EncryptionAlgorithm
             //Nta(decodeURIComponent(h.s))
             ctRegex!`(\w+\(decodeURIComponent\(\w+\.s\)\))`,
             //Fp(3,decodeURIComponent(P.s))
-            ctRegex!`=(\w+\(\d+,decodeURIComponent\(\w+\.s\)\))`,
+            ctRegex!`=((?:\w|_|\$)+\(\d+,decodeURIComponent\(\w+\.s\)\))`,
         ];
         foreach(regex; regexes)
         {
             auto match = javascript.matchFirst(regex);
             if(!match.empty)
             {
+               logger.displayVerbose("Found match: ", match[1]);
                return match[1];
             }
         }
@@ -564,8 +565,8 @@ struct EncryptionAlgorithm
             modifiedJavascript = desugarReflectConstruct(modifiedJavascript);
 
             string challenge = findChallenge();
-            string challengeName = challenge.matchOrFail!`(\w+)\(.*?\)`;
-            Captures!string optionalFirstArgument = challenge.matchFirst(ctRegex!`\w+\((\d+),.*\)`);
+            string challengeName = challenge.matchOrFail!`((?:\w|_|\$)+)\(.*?\)`;
+            Captures!string optionalFirstArgument = challenge.matchFirst(ctRegex!`(?:\w|_|\$)+\((\d+),.*\)`);
             if(optionalFirstArgument.empty)
             {
                 modifiedJavascript = injectDescrambleFunction(modifiedJavascript, challengeName, signatureCipher);
@@ -575,6 +576,7 @@ struct EncryptionAlgorithm
                 modifiedJavascript = injectDescrambleFunction(modifiedJavascript, challengeName, optionalFirstArgument[1], signatureCipher);
             }
 
+	    writeText("signatureCipher.js", modifiedJavascript);
             if(0 != duk_peval_string(context, modifiedJavascript.toStringz()))
             {
                 throw new Exception(duk_safe_to_string(context, -1).to!string);
@@ -748,6 +750,7 @@ struct ThrottlingAlgorithm
             modifiedJavascript = desugarReflectConstruct(modifiedJavascript);
             modifiedJavascript = injectDescrambleFunction(modifiedJavascript, challengeName, n);
 
+	    writeText("n.js", modifiedJavascript);
             if(0 != duk_peval_string(context, modifiedJavascript.toStringz()))
             {
                 throw new Exception(duk_safe_to_string(context, -1).to!string);
@@ -895,6 +898,18 @@ unittest
 
     string actual = algorithm.decrypt("wIeAIeWIevIn2qCF3o_-dozs4AsiBA2qLk65K_qk1af9RaMEP3WEiAhvX2Hr%3Ddmpe_hDeRkbByG0xMfsm3wZt_Hcevx5Cx4uJAhIgRwsSdQfJA");
     string expected = "iAIeWIevIn2qCF3o_-dozs4AskBA2qLk65K_qk1af9RaMEP3WEiAhvXHer%3Ddmpe_hDeR2bByG0xMfsm3wZt_Hcevx5Cx4uJAhIgRwsSdQfJA";
+
+    assert(expected == actual, expected ~ " != " ~ actual);
+}
+
+unittest
+{
+    writeln("When video is VEVO song, should correctly decrypt video signature in base.js 8650557.js".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
+    auto algorithm = EncryptionAlgorithm("tests/87644c66.js".readText(), new StdoutLogger());
+
+    string actual = algorithm.decrypt("%3D%3DQZpiVjqkTmqUZtelcE3NAhh0Q5a0GMEYRcjhf_9SI_MDQICkMKZA5UNNKI-gNDNYOpWJlVASQtzLO3WVFexrbHS4qVgIQRwsSdQfJp");
+    string expected = "AJfQdSswRQIgVqpSHbrxeFVW3OLztQSAVlJWpOYNDNg-IKNNU54ZKMkCIQDM_IS9_fhjcRYEMG0a5Q0hhAN3EcletZUqmTkqjVipZQ%3D%3D";
 
     assert(expected == actual, expected ~ " != " ~ actual);
 }
