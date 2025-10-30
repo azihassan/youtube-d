@@ -5,7 +5,7 @@ import std.stdio;
 import std.typecons : tuple, Tuple;
 import std.conv : to;
 import std.array : replace;
-import std.file : readText;
+import std.file : readText, writeText = write;
 import std.string : indexOf, format, lastIndexOf, split, strip, toStringz, startsWith, join;
 import std.regex : regex, ctRegex, matchFirst, escaper, replaceAll, Captures;
 import std.algorithm : canFind, filter, reverse, map;
@@ -504,13 +504,14 @@ struct EncryptionAlgorithm
             //Nta(decodeURIComponent(h.s))
             ctRegex!`(\w+\(decodeURIComponent\(\w+\.s\)\))`,
             //Fp(3,decodeURIComponent(P.s))
-            ctRegex!`=(\w+\(\d+,decodeURIComponent\(\w+\.s\)\))`,
+            ctRegex!`=((?:\w|_|\$)+\(\d+,decodeURIComponent\(\w+\.s\)\))`,
         ];
         foreach(regex; regexes)
         {
             auto match = javascript.matchFirst(regex);
             if(!match.empty)
             {
+               writeln("Found match: ", match[1]);
                return match[1];
             }
         }
@@ -565,7 +566,7 @@ struct EncryptionAlgorithm
 
             string challenge = findChallenge();
             string challengeName = challenge.matchOrFail!`(\w+)\(.*?\)`;
-            Captures!string optionalFirstArgument = challenge.matchFirst(ctRegex!`\w+\((\d+),.*\)`);
+            Captures!string optionalFirstArgument = challenge.matchFirst(ctRegex!`(?:\w|_|\$)+\((\d+),.*\)`);
             if(optionalFirstArgument.empty)
             {
                 modifiedJavascript = injectDescrambleFunction(modifiedJavascript, challengeName, signatureCipher);
@@ -575,6 +576,7 @@ struct EncryptionAlgorithm
                 modifiedJavascript = injectDescrambleFunction(modifiedJavascript, challengeName, optionalFirstArgument[1], signatureCipher);
             }
 
+	    writeText("tmp.js", modifiedJavascript);
             if(0 != duk_peval_string(context, modifiedJavascript.toStringz()))
             {
                 throw new Exception(duk_safe_to_string(context, -1).to!string);
