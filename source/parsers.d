@@ -695,6 +695,7 @@ struct ThrottlingAlgorithm
             //$EK=function(p){var y=p[G[59]](G[11]),...return y[G[54]](G[11])};
             ctRegex!(`(.{3})=function\(\w+\)\{var \w+=\w\[.+\]\(.+\),(.|\s)+?return .+\(.+\)\};`),
             ctRegex!(`var \w{3}=\[(\w{3})\]`),
+            ctRegex!(`var .{3}=\[(.{3})\]`),
         ];
         foreach(regex; regexes)
         {
@@ -910,6 +911,19 @@ unittest
 
     string actual = algorithm.decrypt("%3D%3DQZpiVjqkTmqUZtelcE3NAhh0Q5a0GMEYRcjhf_9SI_MDQICkMKZA5UNNKI-gNDNYOpWJlVASQtzLO3WVFexrbHS4qVgIQRwsSdQfJp");
     string expected = "AJfQdSswRQIgVqpSHbrxeFVW3OLztQSAVlJWpOYNDNg-IKNNU54ZKMkCIQDM_IS9_fhjcRYEMG0a5Q0hhAN3EcletZUqmTkqjVipZQ%3D%3D";
+
+    assert(expected == actual, expected ~ " != " ~ actual);
+}
+
+unittest
+{
+    writeln("Should parse challenge in base.js 3062cec8.js".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
+    auto algorithm = ThrottlingAlgorithm("tests/3062cec8.js".readText(), new StdoutLogger());
+    assert(algorithm.findChallengeName() == "EuO", algorithm.findChallengeName() ~ " != EuO");
+
+    string expected = "aXtqvScqyMQNhg";
+    string actual = algorithm.solve("POgLT81CGkQw4dNl");
 
     assert(expected == actual, expected ~ " != " ~ actual);
 }
