@@ -5,7 +5,7 @@ import std.stdio;
 import std.typecons : tuple, Tuple;
 import std.conv : to;
 import std.array : replace;
-import std.file : readText, writeText = write;
+import std.file : readText;
 import std.string : indexOf, format, lastIndexOf, split, strip, toStringz, startsWith, join;
 import std.regex : regex, ctRegex, matchFirst, escaper, replaceAll, Captures;
 import std.algorithm : canFind, filter, reverse, map;
@@ -576,7 +576,6 @@ struct EncryptionAlgorithm
                 modifiedJavascript = injectDescrambleFunction(modifiedJavascript, challengeName, optionalFirstArgument[1], signatureCipher);
             }
 
-            writeText("signatureCipher.js", modifiedJavascript);
             if(0 != duk_peval_string(context, modifiedJavascript.toStringz()))
             {
                 throw new Exception(duk_safe_to_string(context, -1).to!string);
@@ -694,7 +693,6 @@ struct ThrottlingAlgorithm
             ctRegex!(`(\w{3})=function\(\w+\)\{var \w+=\w\[.+\]\(.+\),(.|\s)+?return .+\(.+\)\};`),
             //$EK=function(p){var y=p[G[59]](G[11]),...return y[G[54]](G[11])};
             ctRegex!(`(.{3})=function\(\w+\)\{var \w+=\w\[.+\]\(.+\),(.|\s)+?return .+\(.+\)\};`),
-            ctRegex!(`var \w{3}=\[(\w{3})\]`),
             ctRegex!(`var .{3}=\[(.{3})\]`),
         ];
         foreach(regex; regexes)
@@ -751,7 +749,6 @@ struct ThrottlingAlgorithm
             modifiedJavascript = desugarReflectConstruct(modifiedJavascript);
             modifiedJavascript = injectDescrambleFunction(modifiedJavascript, challengeName, n);
 
-            writeText("n.js", modifiedJavascript);
             if(0 != duk_peval_string(context, modifiedJavascript.toStringz()))
             {
                 throw new Exception(duk_safe_to_string(context, -1).to!string);
@@ -924,6 +921,19 @@ unittest
 
     string expected = "aXtqvScqyMQNhg";
     string actual = algorithm.solve("POgLT81CGkQw4dNl");
+
+    assert(expected == actual, expected ~ " != " ~ actual);
+}
+
+unittest
+{
+    writeln("Should parse challenge in base.js 4e51e895.js".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
+    auto algorithm = ThrottlingAlgorithm("tests/4e51e895.js".readText(), new StdoutLogger());
+    assert(algorithm.findChallengeName() == "k90", algorithm.findChallengeName() ~ " != k90");
+
+    string expected = "WOzMLbCkAi2gbQ";
+    string actual = algorithm.solve("Bh4J-oo8NnHxOIsvX");
 
     assert(expected == actual, expected ~ " != " ~ actual);
 }
