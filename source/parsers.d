@@ -5,7 +5,7 @@ import std.stdio;
 import std.typecons : tuple, Tuple;
 import std.conv : to;
 import std.array : replace;
-import std.file : readText;
+import std.file : readText, writeText = write;
 import std.string : indexOf, format, lastIndexOf, split, strip, toStringz, startsWith, join;
 import std.regex : regex, ctRegex, matchFirst, escaper, replaceAll, Captures;
 import std.algorithm : canFind, filter, reverse, map;
@@ -158,10 +158,16 @@ class SimpleYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
         }
 
         string n = queryString["n"];
-        logger.displayVerbose("Found n : ", n);
+        logger.display("Found n : ", n, ", solving attempt 1/2");
         auto solver = ThrottlingAlgorithm(baseJS, logger);
         string solvedN = solver.solve(n);
-        logger.displayVerbose("Solved n : ", solvedN);
+        logger.displayVerbose("Solved n = ", solvedN);
+        if(n == solvedN)
+        {
+            logger.display("Solving N attempt 2/2 (with fake URL)");
+            solvedN = solver.solve(n, true);
+            logger.display("Solved n = ", solvedN);
+        }
         return url.replace("&n=" ~ n, "&n=" ~ solvedN);
     }
 
@@ -694,6 +700,7 @@ struct ThrottlingAlgorithm
             //$EK=function(p){var y=p[G[59]](G[11]),...return y[G[54]](G[11])};
             ctRegex!(`(.{3})=function\(\w+\)\{var \w+=\w\[.+\]\(.+\),(.|\s)+?return .+\(.+\)\};`),
             ctRegex!(`var .{3}=\[(.{3})\]`),
+            ctRegex!(`.\.url=(...)\(.\.url\)`),
         ];
         foreach(regex; regexes)
         {
@@ -717,9 +724,10 @@ struct ThrottlingAlgorithm
         function XMLHttpRequest() { }` ~ javascript.replace("window.location.hostname", "WINDOW.location.hostname");
     }
 
-    string injectDescrambleFunction(string javascript, string challengeName, string n)
+    string injectDescrambleFunction(string javascript, string challengeName, string n, string fakeUrl)
     {
-        return javascript.replace("})(_yt_player);", "descramble=" ~ challengeName ~ "})(_yt_player);") ~ "var descrambled = descramble('" ~ n ~ "');";
+        string argument = fakeUrl != "" ? fakeUrl : n;
+        return javascript.replace("})(_yt_player);", "descramble=" ~ challengeName ~ "})(_yt_player);") ~ "var descrambled = descramble('" ~ argument ~ "');";
     }
 
     string desugarReflectConstruct(string javascript)
@@ -728,7 +736,7 @@ struct ThrottlingAlgorithm
         return javascript.replaceAll(reflectConstructRegex, "new function(){}");
     }
 
-    string solve(string n)
+    string solve(string n, bool shouldFakeUrl = false)
     {
         duk_context *context = duk_create_heap_default();
         if(!context)
@@ -744,10 +752,14 @@ struct ThrottlingAlgorithm
 
         try
         {
+            //99f55c01 expects N param to be passed as /n/XXXX, so we fabricate a minimal fake URL that satisfies the descrambling function's required format
+            string[] fakeUrlParts = ["https://www.googlevideo.com/n/", n, "/videoplayback?n=" ~ n];
+
             string challengeName = findChallengeName();
             string modifiedJavascript = injectFakes(javascript);
             modifiedJavascript = desugarReflectConstruct(modifiedJavascript);
-            modifiedJavascript = injectDescrambleFunction(modifiedJavascript, challengeName, n);
+            modifiedJavascript = injectDescrambleFunction(modifiedJavascript, challengeName, n, shouldFakeUrl ? fakeUrlParts.join("") : "");
+            writeText("tmp.js", modifiedJavascript);
 
             if(0 != duk_peval_string(context, modifiedJavascript.toStringz()))
             {
@@ -755,9 +767,10 @@ struct ThrottlingAlgorithm
             }
             duk_get_global_string(context, "descrambled");
             string result = duk_get_string(context, -1).to!string;
-            logger.display("Solved N: ", result);
             duk_pop(context);
-            return result;
+            //99f55c01 expects N param to be passed as /n/XXXX and we injected it as such in injectDescrambleFunction
+            //now we restore it by parsing it out of the fake URL
+            return shouldFakeUrl ? result.replace(fakeUrlParts[0], "").replace(fakeUrlParts[2], "") : result;
         }
         catch(Exception e)
         {
@@ -934,6 +947,32 @@ unittest
 
     string expected = "WOzMLbCkAi2gbQ";
     string actual = algorithm.solve("Bh4J-oo8NnHxOIsvX");
+
+    assert(expected == actual, expected ~ " != " ~ actual);
+}
+
+unittest
+{
+    writeln("Should parse challenge in base.js 6c5cb4f4.js".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
+    auto algorithm = ThrottlingAlgorithm("tests/6c5cb4f4.js".readText(), new StdoutLogger());
+    assert(algorithm.findChallengeName() == "iaU", algorithm.findChallengeName() ~ " != iaU");
+
+    string expected = "7QBqIDVmMRQMDQ";
+    string actual = algorithm.solve("fuYjRvOmC35Q8SEA", true);
+
+    assert(expected == actual, expected ~ " != " ~ actual);
+}
+
+unittest
+{
+    writeln("Should parse challenge in base.js 99f55c01.js".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
+    auto algorithm = ThrottlingAlgorithm("tests/99f55c01.js".readText(), new StdoutLogger());
+    assert(algorithm.findChallengeName() == "xFY", algorithm.findChallengeName() ~ " != xFY");
+
+    string expected = "KenauEuQwP";
+    string actual = algorithm.solve("VWfyv4PsZTsBGpID", true);
 
     assert(expected == actual, expected ~ " != " ~ actual);
 }
