@@ -16,6 +16,9 @@ import helpers : parseQueryString, matchOrFail, StdoutLogger, formatTitle, forma
 import html;
 import duktape;
 
+enum JS_VARIABLE_REGEX_GROUP = `(\w|\$|_)+`;
+enum JS_VARIABLE_REGEX_NON_CAPTURING_GROUP = `(?:\w+|\$|_)+`;
+
 abstract class YoutubeVideoURLExtractor
 {
     protected string html;
@@ -161,7 +164,7 @@ class SimpleYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
         logger.display("Found n : ", n, ", solving attempt 1/2");
         auto solver = ThrottlingAlgorithm(baseJS, logger);
         string solvedN = solver.solve(n);
-        logger.displayVerbose("Solved n = ", solvedN);
+        logger.display("Solved n = ", solvedN);
         if(n == solvedN)
         {
             logger.display("Solving N attempt 2/2 (with fake URL)");
@@ -323,7 +326,13 @@ class AdvancedYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
         logger.displayVerbose("Found n : ", n);
         auto solver = ThrottlingAlgorithm(baseJS, logger);
         string solvedN = solver.solve(n);
-        logger.displayVerbose("Solved n : ", solvedN);
+        logger.display("Solved n = ", solvedN);
+        if(n == solvedN)
+        {
+            logger.display("Solving N attempt 2/2 (with fake URL)");
+            solvedN = solver.solve(n, true);
+            logger.display("Solved n = ", solvedN);
+        }
         return url.replace("&n=" ~ n, "&n=" ~ solvedN);
     }
 
@@ -511,6 +520,8 @@ struct EncryptionAlgorithm
             ctRegex!`(\w+\(decodeURIComponent\(\w+\.s\)\))`,
             //Fp(3,decodeURIComponent(P.s))
             ctRegex!`=((?:\w|_|\$)+\(\d+,decodeURIComponent\(\w+\.s\)\))`,
+            //V0(b.url,b.sp,b.s)
+            ctRegex!`((?:\w+|\$|_)\((?:\w+|\$|_)\.url,(?:\w+|\$|_)\.sp,(?:\w+|\$|_)\.s\))`,
         ];
         foreach(regex; regexes)
         {
@@ -545,6 +556,15 @@ struct EncryptionAlgorithm
         return javascript.replace("})(_yt_player);", "descramble=" ~ challengeName ~ "})(_yt_player);") ~ "var descrambled = encodeURIComponent(descramble(" ~ firstArgument ~ ", decodeURIComponent('" ~ s ~ "')));";
     }
 
+    string injectDescrambleFunctionWithEmptyArguments(string javascript, string challengeName, string s)
+    {
+        //this decrypting function returns an object where the signature is embedded in object.W.s
+        //we don't know what W is ahead of time, so we traverse the object's keys
+        //we have to pass in 's' as a second argument to the function so that the decrypted signature is found in object.W.s, not object.W.x for example
+        //note: filtering with anonymous function because duktape doesn't support arrow functions ):
+        return javascript.replace("})(_yt_player);", "descramble=" ~ challengeName ~ "})(_yt_player);") ~ "var result = descramble('', 's', '" ~ s ~ "'); var descrambled = Object.entries(result).filter(function(entry) { return entry[1] instanceof Object && entry[1].s !== undefined; })[0][1].s;";
+    }
+
     string desugarReflectConstruct(string javascript)
     {
         auto reflectConstructRegex = ctRegex!`Reflect.construct\(\w+,\[\],function\(\)\{\}\)`;
@@ -573,15 +593,21 @@ struct EncryptionAlgorithm
             string challenge = findChallenge();
             string challengeName = challenge.matchOrFail!`((?:\w|_|\$)+)\(.*?\)`;
             Captures!string optionalFirstArgument = challenge.matchFirst(ctRegex!`(?:\w|_|\$)+\((\d+),.*\)`);
-            if(optionalFirstArgument.empty)
-            {
-                modifiedJavascript = injectDescrambleFunction(modifiedJavascript, challengeName, signatureCipher);
-            }
-            else
+            Captures!string optionalArgList = challenge.matchFirst(ctRegex!`(?:\w|_|\$)+\((\w+|\$|_)\.url,(\w+|\$|_)\.sp,(\w+|\$|_)\.s\)`);
+            if(!optionalFirstArgument.empty)
             {
                 modifiedJavascript = injectDescrambleFunction(modifiedJavascript, challengeName, optionalFirstArgument[1], signatureCipher);
             }
+            else if(!optionalArgList.empty)
+            {
+                modifiedJavascript = injectDescrambleFunctionWithEmptyArguments(modifiedJavascript, challengeName, signatureCipher);
+            }
+            else
+            {
+                modifiedJavascript = injectDescrambleFunction(modifiedJavascript, challengeName, signatureCipher);
+            }
 
+            writeText("tmp2.js", modifiedJavascript);
             if(0 != duk_peval_string(context, modifiedJavascript.toStringz()))
             {
                 throw new Exception(duk_safe_to_string(context, -1).to!string);
@@ -973,6 +999,18 @@ unittest
 
     string expected = "KenauEuQwP";
     string actual = algorithm.solve("VWfyv4PsZTsBGpID", true);
+
+    assert(expected == actual, expected ~ " != " ~ actual);
+}
+
+unittest
+{
+    writeln("When video is VEVO song, should correctly decrypt video signature in base.js 6c5cb4f4.js".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
+    auto algorithm = EncryptionAlgorithm("tests/6c5cb4f4.js".readText(), new StdoutLogger());
+
+    string actual = algorithm.decrypt("D%3D6%3D%3DQxB7T%3D0HcDzEY48727NT1_zvKe3Rl7SW7jp6QHU0PXwDQICMv6sm66gRAu3n6x5BQxu-hYhQ4IRZ7LHkcrX5WQOEjWgIQRw4MNqEHn");
+    string expected = "AHEqNM4wRQIgWjEOQW5XrckHL7ZRI4QhYh-uxQB5x6n3unRg6Dms6vMCIQDwXP0UHQ6pj7WS7lR3eKvz_1TN72784YEzDcH06T7BxQ%3D%3D";
 
     assert(expected == actual, expected ~ " != " ~ actual);
 }
