@@ -8,8 +8,7 @@ import std.net.curl : Curl, CurlOption;
 import std.path : buildPath;
 import std.typecons : Flag, Yes, No;
 import std.string : indexOf;
-import std.regex : ctRegex, matchFirst;
-import std.algorithm : map;
+import std.algorithm : map, canFind;
 
 import helpers : StdoutLogger, parseID, parseQueryString, parseBaseJSKey, formatTitle, formatSuccess;
 import parsers : parseBaseJSURL, YoutubeVideoURLExtractor, SimpleYoutubeVideoURLExtractor, AdvancedYoutubeVideoURLExtractor;
@@ -134,12 +133,11 @@ struct Cache
 
     private YoutubeVideoURLExtractor makeParser(string html, string baseJS, StdoutLogger logger)
     {
-        immutable urlRegex = ctRegex!`"itag":\d+,"url":"(.*?)"`;
-        if(!html.matchFirst(urlRegex).empty)
+        if(html.canFind("signatureCipher"))
         {
-            return new SimpleYoutubeVideoURLExtractor(html, baseJS, logger);
+            return new AdvancedYoutubeVideoURLExtractor(html, baseJS, logger);
         }
-        return new AdvancedYoutubeVideoURLExtractor(html, baseJS, logger);
+        return new SimpleYoutubeVideoURLExtractor(html, baseJS, logger);
     }
 }
 

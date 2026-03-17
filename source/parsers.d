@@ -11,7 +11,7 @@ import std.algorithm : canFind, filter;
 import std.format : formattedRead;
 
 import helpers : parseQueryString, matchOrFail, StdoutLogger, formatTitle, formatSuccess, formatWarning;
-import challenges : ThrottlingAlgorithm, EncryptionAlgorithm;
+import challenges : ThrottlingAlgorithm, SignatureCipherAlgorithm;
 
 import html;
 import duktape;
@@ -309,7 +309,7 @@ class AdvancedYoutubeVideoURLExtractor : YoutubeVideoURLExtractor
     {
         string signatureCipher = findSignatureCipher(itag);
         string[string] params = signatureCipher.parseQueryString();
-        auto algorithm = EncryptionAlgorithm(baseJS, logger);
+        auto algorithm = SignatureCipherAlgorithm(baseJS, logger);
         string sig = algorithm.decrypt(params["s"]);
         string url = params["url"].decodeComponent() ~ "&" ~ params["sp"] ~ "=" ~ sig;
 
