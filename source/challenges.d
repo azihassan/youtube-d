@@ -35,11 +35,11 @@ struct EncryptionAlgorithm
     {
         auto regexes = [
             //Nta(decodeURIComponent(h.s))
-            ctRegex!`(\w+\(decodeURIComponent\(\w+\.s\)\))`,
+            ctRegex!`(\w+\(decodeURIComponent\(\w+?\.s\)\))`,
             //Fp(3,decodeURIComponent(P.s))
-            ctRegex!`=((?:\w|_|\$)+\(\d+,decodeURIComponent\(\w+\.s\)\))`,
+            ctRegex!`=((?:\w|_|\$)+?\(\d+?,decodeURIComponent\(\w+\.s\)\))`,
             //V0(b.url,b.sp,b.s)
-            ctRegex!`((?:\w+|\$|_)\((?:\w+|\$|_)\.url,(?:\w+|\$|_)\.sp,(?:\w+|\$|_)\.s\))`,
+            ctRegex!`((?:\w+?|\$|_)\((?:\w+?|\$|_)\.url,(?:\w+?|\$|_)\.sp,(?:\w+?|\$|_)\.s\))`,
         ];
         foreach(regex; regexes)
         {
@@ -85,7 +85,8 @@ struct EncryptionAlgorithm
 
     string desugarReflectConstruct(string javascript)
     {
-        auto reflectConstructRegex = ctRegex!`Reflect.construct\(\w+,\[\],function\(\)\{\}\)`;
+        //Reflect.construct(B,[],function(){});
+        auto reflectConstructRegex = ctRegex!`Reflect.construct\(\w+?,\[\],function\(\)\{\}\)`;
         return javascript.replaceAll(reflectConstructRegex, "new function(){}");
     }
 
@@ -109,9 +110,9 @@ struct EncryptionAlgorithm
             modifiedJavascript = desugarReflectConstruct(modifiedJavascript);
 
             string challenge = findChallenge();
-            string challengeName = challenge.matchOrFail!`((?:\w|_|\$)+)\(.*?\)`;
-            Captures!string optionalFirstArgument = challenge.matchFirst(ctRegex!`(?:\w|_|\$)+\((\d+),.*\)`);
-            Captures!string optionalArgList = challenge.matchFirst(ctRegex!`(?:\w|_|\$)+\((\w+|\$|_)\.url,(\w+|\$|_)\.sp,(\w+|\$|_)\.s\)`);
+            string challengeName = challenge.matchOrFail!`((?:\w|_|\$)+?)\(.*?\)`;
+            Captures!string optionalFirstArgument = challenge.matchFirst(ctRegex!`(?:\w|_|\$)+?\((\d+?),.*\)`);
+            Captures!string optionalArgList = challenge.matchFirst(ctRegex!`(?:\w|_|\$)+?\((\w|\$|_)+?\.url,(\w|\$|_)+?\.sp,(\w|\$|_)+?\.s\)`);
             if(!optionalFirstArgument.empty)
             {
                 modifiedJavascript = injectDescrambleFunction(modifiedJavascript, challengeName, optionalFirstArgument[1], signatureCipher);
@@ -149,7 +150,7 @@ struct EncryptionAlgorithm
         //function starts with X=X.split("") and ends with return X.join("")
         //eg: r=r[Y[14]](Y[19]);oV[Y[8]](r,30);oV[Y[8]](r,65);oV[Y[8]](r,2);return r[Y[3]](Y[19])
         string[] steps = encryptionFunctionBody.split(";");
-        string encryptionObject = steps[1].matchOrFail!`^(\w+)`();
+        string encryptionObject = steps[1].matchOrFail!`^(\w+?)`();
         return javascript.matchOrFail(`(var ` ~ encryptionObject ~ `=\{(?:.|\s)+?\}\});`);
     }
 }
@@ -211,9 +212,9 @@ struct ThrottlingAlgorithm
             ctRegex!(`(.{3})=function\(\w\)\{var \w=\w\.split`),
 
             //efh=function(r){var V=r[Y[14]](Y[19]),...return V[Y[3]](Y[19])};
-            ctRegex!(`(\w{3})=function\(\w+\)\{var \w+=\w\[.+\]\(.+\),(.|\s)+?return .+\(.+\)\};`),
+            ctRegex!(`(\w{3})=function\(\w+?\)\{var \w+=\w\[.+\]\(.+\),(.|\s)+?return .+\(.+\)\};`),
             //$EK=function(p){var y=p[G[59]](G[11]),...return y[G[54]](G[11])};
-            ctRegex!(`(.{3})=function\(\w+\)\{var \w+=\w\[.+\]\(.+\),(.|\s)+?return .+\(.+\)\};`),
+            ctRegex!(`(.{3})=function\(\w+?\)\{var \w+=\w\[.+\]\(.+\),(.|\s)+?return .+\(.+\)\};`),
             ctRegex!(`var .{3}=\[(.{3})\]`),
             ctRegex!(`.\.url=(...)\(.\.url\)`),
         ];
@@ -247,7 +248,7 @@ struct ThrottlingAlgorithm
 
     string desugarReflectConstruct(string javascript)
     {
-        auto reflectConstructRegex = ctRegex!`Reflect.construct\(\w+,\[\],function\(\)\{\}\)`;
+        auto reflectConstructRegex = ctRegex!`Reflect.construct\(\w+?,\[\],function\(\)\{\}\)`;
         return javascript.replaceAll(reflectConstructRegex, "new function(){}");
     }
 
