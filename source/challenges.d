@@ -7,6 +7,7 @@ import std.array : replace;
 import std.file : readText, writeText = write;
 import std.string : indexOf, split, toStringz, join, strip;
 import std.regex : ctRegex, matchFirst, replaceAll, Captures;
+import std.process : execute;
 
 import helpers : matchOrFail, StdoutLogger, formatTitle, formatSuccess, formatError, formatWarning;
 
@@ -119,6 +120,7 @@ struct SignatureCipherAlgorithm
             string modifiedJavascript = injectFakes(javascript);
             modifiedJavascript = desugarReflectConstruct(modifiedJavascript);
             modifiedJavascript = handleChallenge(modifiedJavascript, signatureCipher);
+            modifiedJavascript ~= "console.log(descrambled);";
 
             writeText("tmp2.js", modifiedJavascript);
             if(0 != duk_peval_string(context, modifiedJavascript.toStringz()))
@@ -132,6 +134,12 @@ struct SignatureCipherAlgorithm
         }
         catch(Exception e)
         {
+            auto command = execute(["node", "tmp2.js"]);
+            if(command.status == 0)
+            {
+                logger.display("signatureCipher solved by external node tmp2.js command: ", command.output);
+                return command.output.strip();
+            }
             logger.display(e.message.idup.formatWarning());
             logger.display("Failed to solve signatureCipher parameter, downloads might be rate limited".formatWarning());
             logger.displayVerbose(e.info.to!string.formatWarning());
@@ -247,15 +255,15 @@ struct ThrottlingAlgorithm
             duk_destroy_heap(context);
         }
 
+        //99f55c01 expects N param to be passed as /n/XXXX, so we fabricate a minimal fake URL that satisfies the descrambling function's required format
+        string[] fakeUrlParts = ["https://www.googlevideo.com/n/", n, "/videoplayback?n=" ~ n];
         try
         {
-            //99f55c01 expects N param to be passed as /n/XXXX, so we fabricate a minimal fake URL that satisfies the descrambling function's required format
-            string[] fakeUrlParts = ["https://www.googlevideo.com/n/", n, "/videoplayback?n=" ~ n];
-
             string challengeName = findChallengeName();
             string modifiedJavascript = injectFakes(javascript);
             modifiedJavascript = desugarReflectConstruct(modifiedJavascript);
             modifiedJavascript = injectDescrambleFunction(modifiedJavascript, challengeName, n, shouldFakeUrl ? fakeUrlParts.join("") : "");
+            modifiedJavascript ~= "console.log(descrambled);";
             writeText("tmp.js", modifiedJavascript);
 
             if(0 != duk_peval_string(context, modifiedJavascript.toStringz()))
@@ -271,6 +279,13 @@ struct ThrottlingAlgorithm
         }
         catch(Exception e)
         {
+            auto command = execute(["node", "tmp.js"]);
+            if(command.status == 0)
+            {
+                logger.display("N parameter solved by external node tmp.js command: ", command.output);
+                string result = command.output.strip();
+                return shouldFakeUrl ? result.replace(fakeUrlParts[0], "").replace(fakeUrlParts[2], "") : result;
+            }
             logger.display(e.message.idup.formatWarning());
             logger.display("Failed to solve N parameter, downloads might be rate limited".formatWarning());
             logger.displayVerbose(e.info.to!string.formatWarning());
