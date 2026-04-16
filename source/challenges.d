@@ -12,7 +12,7 @@ import std.process : execute;
 import helpers : matchOrFail, StdoutLogger, formatTitle, formatSuccess, formatError, formatWarning;
 
 import html;
-import duktape;
+import quickjs;
 
 //still breaks for invalid variable names like var 1e, but eeh close enough
 enum JS_VAR_GROUP = `(\w|\$|_)+?`;
@@ -103,37 +103,21 @@ struct SignatureCipherAlgorithm
 
     string decrypt(string signatureCipher)
     {
-        duk_context *context = duk_create_heap_default();
-        if(!context)
-        {
-            logger.display("Failed to create a Duktape heap.".formatError());
-            throw new Exception("Failed to decrypt signatureCipher");
-        }
-
-        scope(exit)
-        {
-            duk_destroy_heap(context);
-        }
 
         try
         {
             string modifiedJavascript = injectFakes(javascript);
             modifiedJavascript = desugarReflectConstruct(modifiedJavascript);
             modifiedJavascript = handleChallenge(modifiedJavascript, signatureCipher);
-            modifiedJavascript ~= "console.log(descrambled);";
+            //modifiedJavascript ~= "console.log(descrambled);";
 
             writeText("tmp2.js", modifiedJavascript);
-            if(0 != duk_peval_string(context, modifiedJavascript.toStringz()))
-            {
-                throw new Exception(duk_safe_to_string(context, -1).to!string);
-            }
-            duk_get_global_string(context, "descrambled");
-            string result = duk_get_string(context, -1).to!string;
-            duk_pop(context);
-            return result;
+            return evalJS(modifiedJavascript, "descrambled");
         }
         catch(Exception e)
         {
+            logger.display("QJS failed: " ~ e.message);
+            e.writeln();
             auto command = execute(["node", "tmp2.js"]);
             if(command.status == 0)
             {
@@ -243,18 +227,6 @@ struct ThrottlingAlgorithm
 
     string solve(string n, bool shouldFakeUrl = false)
     {
-        duk_context *context = duk_create_heap_default();
-        if(!context)
-        {
-            logger.display("Failed to create a Duktape heap.".formatError());
-            return n;
-        }
-
-        scope(exit)
-        {
-            duk_destroy_heap(context);
-        }
-
         //99f55c01 expects N param to be passed as /n/XXXX, so we fabricate a minimal fake URL that satisfies the descrambling function's required format
         string[] fakeUrlParts = ["https://www.googlevideo.com/n/", n, "/videoplayback?n=" ~ n];
         try
@@ -263,22 +235,18 @@ struct ThrottlingAlgorithm
             string modifiedJavascript = injectFakes(javascript);
             modifiedJavascript = desugarReflectConstruct(modifiedJavascript);
             modifiedJavascript = injectDescrambleFunction(modifiedJavascript, challengeName, n, shouldFakeUrl ? fakeUrlParts.join("") : "");
-            modifiedJavascript ~= "console.log(descrambled);";
+            //modifiedJavascript ~= "console.log(descrambled);";
             writeText("tmp.js", modifiedJavascript);
 
-            if(0 != duk_peval_string(context, modifiedJavascript.toStringz()))
-            {
-                throw new Exception(duk_safe_to_string(context, -1).to!string);
-            }
-            duk_get_global_string(context, "descrambled");
-            string result = duk_get_string(context, -1).to!string;
-            duk_pop(context);
+            string result = evalJS(modifiedJavascript, "descrambled");
             //99f55c01 expects N param to be passed as /n/XXXX and we injected it as such in injectDescrambleFunction
             //now we restore it by parsing it out of the fake URL
             return shouldFakeUrl ? result.replace(fakeUrlParts[0], "").replace(fakeUrlParts[2], "") : result;
         }
         catch(Exception e)
         {
+            logger.display("QJS failed: " ~ e.message);
+            e.writeln();
             auto command = execute(["node", "tmp.js"]);
             if(command.status == 0)
             {

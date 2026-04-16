@@ -14,7 +14,6 @@ import helpers : parseQueryString, matchOrFail, StdoutLogger, formatTitle, forma
 import challenges : ThrottlingAlgorithm, SignatureCipherAlgorithm;
 
 import html;
-import duktape;
 
 abstract class YoutubeVideoURLExtractor
 {

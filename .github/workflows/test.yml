@@ -26,6 +26,28 @@ jobs:
       with:
         compiler: ${{ matrix.os.compiler }}
 
+    - name: Install QuickJS-NG (Linux or MacOS)
+      if: matrix.os.name != 'windows-latest'
+      #todo move to separate repo
+      run: |
+        git clone --depth 1 https://github.com/quickjs-ng/quickjs.git /tmp/quickjs
+        cd /tmp/quickjs
+        cmake -B build -DBUILD_SHARED_LIBS=OFF
+        cmake --build build
+        sudo mkdir -p /usr/local/lib/quickjs
+        sudo cp build/libqjs.a /usr/local/lib/quickjs/libquickjs.a
+
+      #todo move to separate repo
+    - name: Install QuickJS-NG (Windows)
+      if: matrix.os.name == 'windows-latest'
+      run: |
+        git clone --depth 1 https://github.com/quickjs-ng/quickjs.git c:\quickjs
+        cd c:\quickjs
+        cmake -B build -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release
+        cmake --build build
+        mkdir C:\quickjs-lib
+        echo F | xcopy build\Debug\qjs.lib C:\quickjs-lib\quickjs.lib
+
     - name: Build
       run: dub build
 
