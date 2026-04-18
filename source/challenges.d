@@ -103,13 +103,12 @@ struct SignatureCipherAlgorithm
 
     string decrypt(string signatureCipher)
     {
-
+        string modifiedJavascript;
         try
         {
-            string modifiedJavascript = injectFakes(javascript);
+            modifiedJavascript = injectFakes(javascript);
             modifiedJavascript = desugarReflectConstruct(modifiedJavascript);
             modifiedJavascript = handleChallenge(modifiedJavascript, signatureCipher);
-            //modifiedJavascript ~= "console.log(descrambled);";
 
             writeText("tmp2.js", modifiedJavascript);
             return evalJS(modifiedJavascript, "descrambled");
@@ -118,6 +117,8 @@ struct SignatureCipherAlgorithm
         {
             logger.display("QJS failed: " ~ e.message);
             e.writeln();
+            modifiedJavascript ~= "console.log(descrambled);";
+            writeText("tmp2.js", modifiedJavascript);
             auto command = execute(["node", "tmp2.js"]);
             if(command.status == 0)
             {
@@ -205,7 +206,7 @@ struct ThrottlingAlgorithm
 
             //$EK=function(p){var y=p[G[59]](G[11]),...return y[G[54]](G[11])};
             //var HjQ=[$EK]
-            ctRegex!(`var .{3}=\[(.{3})\]`),
+            ctRegex!(`var .{3}=\[((?:\w|\$|_){3})\]`),
             ctRegex!(`.\.url=(...)\(.\.url\)`),
         ];
         foreach(regex; regexes)
@@ -229,13 +230,13 @@ struct ThrottlingAlgorithm
     {
         //99f55c01 expects N param to be passed as /n/XXXX, so we fabricate a minimal fake URL that satisfies the descrambling function's required format
         string[] fakeUrlParts = ["https://www.googlevideo.com/n/", n, "/videoplayback?n=" ~ n];
+        string modifiedJavascript;
         try
         {
             string challengeName = findChallengeName();
-            string modifiedJavascript = injectFakes(javascript);
+            modifiedJavascript = injectFakes(javascript);
             modifiedJavascript = desugarReflectConstruct(modifiedJavascript);
             modifiedJavascript = injectDescrambleFunction(modifiedJavascript, challengeName, n, shouldFakeUrl ? fakeUrlParts.join("") : "");
-            //modifiedJavascript ~= "console.log(descrambled);";
             writeText("tmp.js", modifiedJavascript);
 
             string result = evalJS(modifiedJavascript, "descrambled");
@@ -247,6 +248,8 @@ struct ThrottlingAlgorithm
         {
             logger.display("QJS failed: " ~ e.message);
             e.writeln();
+            modifiedJavascript ~= "console.log(descrambled);";
+            writeText("tmp.js", modifiedJavascript);
             auto command = execute(["node", "tmp.js"]);
             if(command.status == 0)
             {
@@ -465,6 +468,19 @@ unittest
 
     string actual = algorithm.decrypt("D%3D6%3D%3DQxB7T%3D0HcDzEY48727NT1_zvKe3Rl7SW7jp6QHU0PXwDQICMv6sm66gRAu3n6x5BQxu-hYhQ4IRZ7LHkcrX5WQOEjWgIQRw4MNqEHn");
     string expected = "AHEqNM4wRQIgWjEOQW5XrckHL7ZRI4QhYh-uxQB5x6n3unRg6Dms6vMCIQDwXP0UHQ6pj7WS7lR3eKvz_1TN72784YEzDcH06T7BxQ%3D%3D";
+
+    assert(expected == actual, expected ~ " != " ~ actual);
+}
+
+unittest
+{
+    writeln("Should parse challenge in base.js 4b0d80ee.js".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
+    auto algorithm = ThrottlingAlgorithm("tests/4b0d80ee.js".readText(), new StdoutLogger());
+    assert(algorithm.findChallengeName() == "S_u", algorithm.findChallengeName() ~ " != S_u");
+
+    string expected = "gyTyecR6ZYLWbw";
+    string actual = algorithm.solve("UShBl_A9tB4eQGS", true);
 
     assert(expected == actual, expected ~ " != " ~ actual);
 }
