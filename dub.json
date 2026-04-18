@@ -9,6 +9,7 @@
 	"libs": [
 		"quickjs"
 	],
+        "dflags": ["-Jsource"],
 	"lflags-linux": [
 		"-L/usr/local/lib/quickjs"
 	],

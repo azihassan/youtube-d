@@ -6,7 +6,7 @@ import std.conv : to, text;
 import std.array : replace;
 import std.file : readText, writeText = write;
 import std.string : indexOf, split, toStringz, join, strip;
-import std.regex : ctRegex, matchFirst, replaceAll, Captures;
+import std.regex : ctRegex, matchFirst;
 import std.process : execute;
 
 import helpers : matchOrFail, StdoutLogger, formatTitle, formatSuccess, formatError, formatWarning;
@@ -18,22 +18,12 @@ import quickjs;
 enum JS_VAR_GROUP = `(\w|\$|_)+?`;
 enum JS_VAR = `(?:\w|\$|_)+?`;
 
-string desugarReflectConstruct(string javascript)
-{
-    //Reflect.construct(B,[],function(){});
-    auto reflectConstructRegex = ctRegex!(`Reflect.construct\(\w+?,\[\],function\(\)\{\}\)`);
-    return javascript.replaceAll(reflectConstructRegex, "new function(){}");
-}
-
+//todo move to separate js file so that it can be tweaked without recompiling
 string injectFakes(string javascript)
 {
-    return `var document = { }; var navigator = { };
-    var WINDOW = {
-              "location": {
-                        "hostname": ''
-                      },
-    };
-    function XMLHttpRequest() { }` ~ javascript.replace("window.location.hostname", "WINDOW.location.hostname");
+    return (mixin("`" ~ import("fakes.js") ~ "`") ~ javascript)
+        .replace("window.location.hostname", "WINDOW.location.hostname")
+        .replace("window.location.href", "WINDOW.location.href");
 }
 
 struct SignatureCipherAlgorithm
@@ -107,7 +97,6 @@ struct SignatureCipherAlgorithm
         try
         {
             modifiedJavascript = injectFakes(javascript);
-            modifiedJavascript = desugarReflectConstruct(modifiedJavascript);
             modifiedJavascript = handleChallenge(modifiedJavascript, signatureCipher);
 
             writeText("tmp2.js", modifiedJavascript);
@@ -235,7 +224,6 @@ struct ThrottlingAlgorithm
         {
             string challengeName = findChallengeName();
             modifiedJavascript = injectFakes(javascript);
-            modifiedJavascript = desugarReflectConstruct(modifiedJavascript);
             modifiedJavascript = injectDescrambleFunction(modifiedJavascript, challengeName, n, shouldFakeUrl ? fakeUrlParts.join("") : "");
             writeText("tmp.js", modifiedJavascript);
 
