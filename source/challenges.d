@@ -73,7 +73,7 @@ struct SignatureCipherAlgorithm
             //let c=M_(42,4042,FU(24,3887,C.s))
             Captures!string firstStepMatch = javascript.matchFirst(ctRegex!(i`(let $(JS_VAR)=$(JS_VAR)\(\d+,\d+,$(JS_VAR)\(\d+,\d+,$(JS_VAR)\.s\)\))`.text));
             //Z[a[5]](G,My(53,4579,c))
-            Captures!string secondStepMatch = javascript.matchFirst(ctRegex!(i`$(JS_VAR)\[$(JS_VAR)\[\d+\]\]\($(JS_VAR),($(JS_VAR)\(\d+,\d+,$(JS_VAR)\))\)`.text));
+            Captures!string secondStepMatch = javascript.matchFirst(ctRegex!(i`;$(JS_VAR)\[$(JS_VAR)\[\d+\]\]\($(JS_VAR),($(JS_VAR)\(\d+,\d+,$(JS_VAR)\))\)`.text));
             if(firstStepMatch.empty || secondStepMatch.empty)
             {
                 return "";
@@ -496,6 +496,18 @@ unittest
 
     string actual = algorithm.decrypt("%3D%3D%3D%3D%3Dwk3w_dKOlUzoy3zHtpp0BPHWNXHg9rptiMYPIvw8mT1DQIC4IL3UkGGmRDK65vQQ2WQYb3qCbU2FleheYKQA1dBtscgIQRwYJ2s0EUEtUEt");
     string expected = "AE0s2JYwRQIgcstBd1UQKYehelF2tbCq3bYQW2QQv56KDRmGGkU3LI4CIQD1Tm8wvIPYMitpr9gHXNWHPB0pptHz3yozUlOKd_w3kw%3D%3D";
+
+    assert(expected == actual, expected ~ " != " ~ actual);
+}
+
+unittest
+{
+    writeln("When video is VEVO song, should correctly decrypt video signature in base.js 21090930.js".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
+    auto algorithm = SignatureCipherAlgorithm("tests/21090930.js".readText(), new StdoutLogger());
+
+    string actual = algorithm.decrypt("cAEVAE0s2JYwRAIgIV7GMnVRenPPAkFRJ1khA9wK3ANLrS06GV6bDhGdV48CIC1i8xmOe6U4uTW7NVNclFGM5huuVe4jvEQOSdvTNlSG");
+    string expected = "AE0s2JYwRAIgIV7GMnVRenPPAkFRJ1mhh9wK3ANLrS06GV6bDcGdk48CIC1i8xVOe6U4uTW7NVNclFGM5huuVe4jvEQOSdvTNlSG";
 
     assert(expected == actual, expected ~ " != " ~ actual);
 }
