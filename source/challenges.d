@@ -6,33 +6,24 @@ import std.conv : to, text;
 import std.array : replace;
 import std.file : readText, writeText = write;
 import std.string : indexOf, split, toStringz, join, strip;
-import std.regex : ctRegex, matchFirst, replaceAll, Captures;
+import std.regex : ctRegex, matchFirst, Captures, replaceAll;
+import std.process : execute;
 
 import helpers : matchOrFail, StdoutLogger, formatTitle, formatSuccess, formatError, formatWarning;
 
 import html;
-import duktape;
+import quickjs;
 
 //still breaks for invalid variable names like var 1e, but eeh close enough
-enum JS_VAR_GROUP = `(\w|\$|_)+?`;
-enum JS_VAR = `(?:\w|\$|_)+?`;
+enum JS_VAR_GROUP = `(\w|\$|_)+`;
+enum JS_VAR = `(?:\w|\$|_)+`;
 
-string desugarReflectConstruct(string javascript)
-{
-    //Reflect.construct(B,[],function(){});
-    auto reflectConstructRegex = ctRegex!(`Reflect.construct\(\w+?,\[\],function\(\)\{\}\)`);
-    return javascript.replaceAll(reflectConstructRegex, "new function(){}");
-}
-
+//todo move to separate js file so that it can be tweaked without recompiling
 string injectFakes(string javascript)
 {
-    return `var document = { }; var navigator = { };
-    var WINDOW = {
-              "location": {
-                        "hostname": ''
-                      },
-    };
-    function XMLHttpRequest() { }` ~ javascript.replace("window.location.hostname", "WINDOW.location.hostname");
+    return (mixin("`" ~ import("fakes.js") ~ "`") ~ javascript)
+        .replace("window.location.hostname", "WINDOW.location.hostname")
+        .replace("window.location.href", "WINDOW.location.href");
 }
 
 struct SignatureCipherAlgorithm
@@ -48,7 +39,7 @@ struct SignatureCipherAlgorithm
 
     InjectDescrambleFunction[] challengeCallbacks = [
         (javascript, signatureCipher) {
-            auto match = javascript.matchFirst(ctRegex!(i`=($(JS_VAR))\((\d,)*?decodeURIComponent\($(JS_VAR)\.s\)\)`.text));
+            Captures!string match = javascript.matchFirst(ctRegex!(i`=($(JS_VAR))\((\d,)*?decodeURIComponent\($(JS_VAR)\.s\)\)`.text));
             if(match.empty)
             {
                 return "";
@@ -64,7 +55,7 @@ struct SignatureCipherAlgorithm
 
 
         (javascript, signatureCipher) {
-            auto match = javascript.matchFirst(ctRegex!(i`(?:($(JS_VAR))\($(JS_VAR)\.url,$(JS_VAR)\.sp,$(JS_VAR)\.s\))`.text));
+            Captures!string match = javascript.matchFirst(ctRegex!(i`(?:($(JS_VAR))\($(JS_VAR)\.url,$(JS_VAR)\.sp,$(JS_VAR)\.s\))`.text));
             if(match.empty)
             {
                 return "";
@@ -76,7 +67,22 @@ struct SignatureCipherAlgorithm
             //we have to pass in 's' as a second argument to the function so that the decrypted signature is found in object.W.s, not object.W.x for example
             //note: filtering with anonymous function because duktape doesn't support arrow functions ):
             return javascript.replace("})(_yt_player);", "descramble=" ~ challengeName ~ "})(_yt_player);") ~ "var result = descramble('', 's', '" ~ signatureCipher ~ "'); var descrambled = Object.entries(result).filter(function(entry) { return entry[1] instanceof Object && entry[1].s !== undefined; })[0][1].s;";
-        }
+        },
+
+        (javascript, signatureCipher) {
+            //let c=M_(42,4042,FU(24,3887,C.s))
+            Captures!string firstStepMatch = javascript.matchFirst(ctRegex!(i`(let $(JS_VAR)=$(JS_VAR)\(\d+,\d+,$(JS_VAR)\(\d+,\d+,$(JS_VAR)\.s\)\))`.text));
+            //Z[a[5]](G,My(53,4579,c))
+            Captures!string secondStepMatch = javascript.matchFirst(ctRegex!(i`;$(JS_VAR)\[$(JS_VAR)\[\d+\]\]\($(JS_VAR),($(JS_VAR)\(\d+,\d+,$(JS_VAR)\))\)`.text));
+            if(firstStepMatch.empty || secondStepMatch.empty)
+            {
+                return "";
+            }
+            //look into interpolation bug in third arg
+            string firstStepMatchWithSignatureCipher = firstStepMatch[1].replaceAll(ctRegex!(r",\w+\.s\)\)"), `,"` ~ signatureCipher ~ `"))`);
+            string payload = firstStepMatchWithSignatureCipher ~ ";" ~ "sig = " ~ secondStepMatch[1] ~ ";";
+            return javascript.replace("})(_yt_player);", payload ~ "})(_yt_player);") ~ "var descrambled = sig;";
+        },
     ];
 
     this(string javascript, StdoutLogger logger)
@@ -102,36 +108,27 @@ struct SignatureCipherAlgorithm
 
     string decrypt(string signatureCipher)
     {
-        duk_context *context = duk_create_heap_default();
-        if(!context)
-        {
-            logger.display("Failed to create a Duktape heap.".formatError());
-            throw new Exception("Failed to decrypt signatureCipher");
-        }
-
-        scope(exit)
-        {
-            duk_destroy_heap(context);
-        }
-
+        string modifiedJavascript;
         try
         {
-            string modifiedJavascript = injectFakes(javascript);
-            modifiedJavascript = desugarReflectConstruct(modifiedJavascript);
+            modifiedJavascript = injectFakes(javascript);
             modifiedJavascript = handleChallenge(modifiedJavascript, signatureCipher);
 
             writeText("tmp2.js", modifiedJavascript);
-            if(0 != duk_peval_string(context, modifiedJavascript.toStringz()))
-            {
-                throw new Exception(duk_safe_to_string(context, -1).to!string);
-            }
-            duk_get_global_string(context, "descrambled");
-            string result = duk_get_string(context, -1).to!string;
-            duk_pop(context);
-            return result;
+            return evalJS(modifiedJavascript, "descrambled");
         }
         catch(Exception e)
         {
+            logger.display("QJS failed: " ~ e.message);
+            e.writeln();
+            modifiedJavascript ~= "console.log(descrambled);";
+            writeText("tmp2.js", modifiedJavascript);
+            auto command = execute(["node", "tmp2.js"]);
+            if(command.status == 0)
+            {
+                logger.display("signatureCipher solved by external node tmp2.js command: ", command.output);
+                return command.output.strip();
+            }
             logger.display(e.message.idup.formatWarning());
             logger.display("Failed to solve signatureCipher parameter, downloads might be rate limited".formatWarning());
             logger.displayVerbose(e.info.to!string.formatWarning());
@@ -213,7 +210,7 @@ struct ThrottlingAlgorithm
 
             //$EK=function(p){var y=p[G[59]](G[11]),...return y[G[54]](G[11])};
             //var HjQ=[$EK]
-            ctRegex!(`var .{3}=\[(.{3})\]`),
+            ctRegex!(`var .{3}=\[((?:\w|\$|_){3})\]`),
             ctRegex!(`.\.url=(...)\(.\.url\)`),
         ];
         foreach(regex; regexes)
@@ -235,42 +232,34 @@ struct ThrottlingAlgorithm
 
     string solve(string n, bool shouldFakeUrl = false)
     {
-        duk_context *context = duk_create_heap_default();
-        if(!context)
-        {
-            logger.display("Failed to create a Duktape heap.".formatError());
-            return n;
-        }
-
-        scope(exit)
-        {
-            duk_destroy_heap(context);
-        }
-
+        //99f55c01 expects N param to be passed as /n/XXXX, so we fabricate a minimal fake URL that satisfies the descrambling function's required format
+        string[] fakeUrlParts = ["https://www.googlevideo.com/n/", n, "/videoplayback?n=" ~ n];
+        string modifiedJavascript;
         try
         {
-            //99f55c01 expects N param to be passed as /n/XXXX, so we fabricate a minimal fake URL that satisfies the descrambling function's required format
-            string[] fakeUrlParts = ["https://www.googlevideo.com/n/", n, "/videoplayback?n=" ~ n];
-
             string challengeName = findChallengeName();
-            string modifiedJavascript = injectFakes(javascript);
-            modifiedJavascript = desugarReflectConstruct(modifiedJavascript);
+            modifiedJavascript = injectFakes(javascript);
             modifiedJavascript = injectDescrambleFunction(modifiedJavascript, challengeName, n, shouldFakeUrl ? fakeUrlParts.join("") : "");
             writeText("tmp.js", modifiedJavascript);
 
-            if(0 != duk_peval_string(context, modifiedJavascript.toStringz()))
-            {
-                throw new Exception(duk_safe_to_string(context, -1).to!string);
-            }
-            duk_get_global_string(context, "descrambled");
-            string result = duk_get_string(context, -1).to!string;
-            duk_pop(context);
+            string result = evalJS(modifiedJavascript, "descrambled");
             //99f55c01 expects N param to be passed as /n/XXXX and we injected it as such in injectDescrambleFunction
             //now we restore it by parsing it out of the fake URL
             return shouldFakeUrl ? result.replace(fakeUrlParts[0], "").replace(fakeUrlParts[2], "") : result;
         }
         catch(Exception e)
         {
+            logger.display("QJS failed: " ~ e.message);
+            e.writeln();
+            modifiedJavascript ~= "console.log(descrambled);";
+            writeText("tmp.js", modifiedJavascript);
+            auto command = execute(["node", "tmp.js"]);
+            if(command.status == 0)
+            {
+                logger.display("N parameter solved by external node tmp.js command: ", command.output);
+                string result = command.output.strip();
+                return shouldFakeUrl ? result.replace(fakeUrlParts[0], "").replace(fakeUrlParts[2], "") : result;
+            }
             logger.display(e.message.idup.formatWarning());
             logger.display("Failed to solve N parameter, downloads might be rate limited".formatWarning());
             logger.displayVerbose(e.info.to!string.formatWarning());
@@ -482,6 +471,43 @@ unittest
 
     string actual = algorithm.decrypt("D%3D6%3D%3DQxB7T%3D0HcDzEY48727NT1_zvKe3Rl7SW7jp6QHU0PXwDQICMv6sm66gRAu3n6x5BQxu-hYhQ4IRZ7LHkcrX5WQOEjWgIQRw4MNqEHn");
     string expected = "AHEqNM4wRQIgWjEOQW5XrckHL7ZRI4QhYh-uxQB5x6n3unRg6Dms6vMCIQDwXP0UHQ6pj7WS7lR3eKvz_1TN72784YEzDcH06T7BxQ%3D%3D";
+
+    assert(expected == actual, expected ~ " != " ~ actual);
+}
+
+unittest
+{
+    writeln("Should parse challenge in base.js 4b0d80ee.js".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
+    auto algorithm = ThrottlingAlgorithm("tests/4b0d80ee.js".readText(), new StdoutLogger());
+    assert(algorithm.findChallengeName() == "S_u", algorithm.findChallengeName() ~ " != S_u");
+
+    string expected = "gyTyecR6ZYLWbw";
+    string actual = algorithm.solve("UShBl_A9tB4eQGS", true);
+
+    assert(expected == actual, expected ~ " != " ~ actual);
+}
+
+unittest
+{
+    writeln("When video is VEVO song, should correctly decrypt video signature in base.js 22cb88bc.js".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
+    auto algorithm = SignatureCipherAlgorithm("tests/22cb88bc.js".readText(), new StdoutLogger());
+
+    string actual = algorithm.decrypt("%3D%3D%3D%3D%3Dwk3w_dKOlUzoy3zHtpp0BPHWNXHg9rptiMYPIvw8mT1DQIC4IL3UkGGmRDK65vQQ2WQYb3qCbU2FleheYKQA1dBtscgIQRwYJ2s0EUEtUEt");
+    string expected = "AE0s2JYwRQIgcstBd1UQKYehelF2tbCq3bYQW2QQv56KDRmGGkU3LI4CIQD1Tm8wvIPYMitpr9gHXNWHPB0pptHz3yozUlOKd_w3kw%3D%3D";
+
+    assert(expected == actual, expected ~ " != " ~ actual);
+}
+
+unittest
+{
+    writeln("When video is VEVO song, should correctly decrypt video signature in base.js 21090930.js".formatTitle());
+    scope(success) writeln("OK\n".formatSuccess());
+    auto algorithm = SignatureCipherAlgorithm("tests/21090930.js".readText(), new StdoutLogger());
+
+    string actual = algorithm.decrypt("cAEVAE0s2JYwRAIgIV7GMnVRenPPAkFRJ1khA9wK3ANLrS06GV6bDhGdV48CIC1i8xmOe6U4uTW7NVNclFGM5huuVe4jvEQOSdvTNlSG");
+    string expected = "AE0s2JYwRAIgIV7GMnVRenPPAkFRJ1mhh9wK3ANLrS06GV6bDcGdk48CIC1i8xVOe6U4uTW7NVNclFGM5huuVe4jvEQOSdvTNlSG";
 
     assert(expected == actual, expected ~ " != " ~ actual);
 }
