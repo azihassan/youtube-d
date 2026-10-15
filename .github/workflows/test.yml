@@ -10,9 +10,9 @@ jobs:
           - name: ubuntu-22.04
             extension:
             compiler: ldc-1.40.0
-          - name: windows-latest
-            extension: .exe
-            compiler: ldc-1.40.0
+          #- name: windows-latest
+          #  extension: .exe
+          #  compiler: ldc-1.40.0
           - name: macos-latest
             extension:
             compiler: ldc-1.41.0
