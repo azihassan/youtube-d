@@ -7,16 +7,19 @@ jobs:
     strategy:
       matrix:
         os:
-          - name: ubuntu-22.04
-            extension:
-            compiler: ldc-1.40.0
+          #- name: ubuntu-22.04
+          #  extension:
+          #  compiler: ldc-1.40.0
           - name: windows-latest
-            extension: .exe
+            extension: .tar.gz
             compiler: ldc-1.40.0
-          - name: macos-latest
-            extension:
-            compiler: ldc-1.41.0
+          #- name: macos-latest
+          #  extension:
+          #  compiler: ldc-1.41.0
     runs-on: ${{ matrix.os.name }}
+    defaults:
+      run:
+        shell: msys2 {0}
 
     steps:
     - uses: actions/checkout@v4
@@ -38,15 +41,34 @@ jobs:
         sudo cp build/libqjs.a /usr/local/lib/quickjs/libquickjs.a
 
       #todo move to separate repo
+    - uses: msys2/setup-msys2@v2
+      if: matrix.os.name == 'windows-latest'
+      with:
+        msystem: UCRT64
+        update: true
+        install: mingw-w64-ucrt-x86_64-git mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-make
+
+    #- name: Setup tmate session
+    #  if: matrix.os.name == 'windows-latest'
+    #  uses: mxschmitt/action-tmate@v3
+
     - name: Install QuickJS-NG (Windows)
       if: matrix.os.name == 'windows-latest'
       run: |
-        git clone --depth 1 https://github.com/quickjs-ng/quickjs.git c:\quickjs
-        cd c:\quickjs
-        cmake -B build -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release
+        git clone --depth 1 https://github.com/quickjs-ng/quickjs.git /tmp/quickjs
+        cd /tmp/quickjs
+        cmake -B build -DBUILD_SHARED_LIBS=OFF
         cmake --build build
-        mkdir C:\quickjs-lib
-        echo F | xcopy build\Debug\qjs.lib C:\quickjs-lib\quickjs.lib
+        mkdir -p /usr/local/lib/quickjs
+        ls -halt
+        ls /bin -halt
+        cp build/libqjs.a /usr/local/lib/quickjs/libquickjs.a
+        cp /bin/msys-2.0.dll windows/ 
+        cp /bin/msys-gcc_s-seh-1.dll windows/ 
+        cp /bin/msys-iconv-2.dll windows/ 
+        cp /bin/msys-stdc++-6.dll windows/'
+
+        #tar the executable + DLLs under youtube-d.tar.gz
 
     - name: Build
       run: dub build
@@ -92,6 +114,7 @@ jobs:
     - name: Download libcurl.dll
       if: matrix.os.name == 'windows-latest'
       run: |
+        tar xf youtube-d.tar.gz
         curl -LO https://downloads.dlang.org/other/libcurl-7.68.0-WinSSL-zlib-x86-x64.zip
         tar -xf libcurl-7.68.0-WinSSL-zlib-x86-x64.zip
         xcopy dmd2\windows\bin64\libcurl.dll .
