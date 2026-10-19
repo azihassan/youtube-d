@@ -31,27 +31,27 @@ jobs:
         with:
           compiler: ${{ matrix.os.compiler }}
 
-    - name: Install QuickJS-NG (Linux or MacOS)
-      if: matrix.os.name != 'windows-latest'
-      #todo move to separate repo
-      run: |
-        git clone --depth 1 https://github.com/quickjs-ng/quickjs.git /tmp/quickjs
-        cd /tmp/quickjs
-        cmake -B build -DBUILD_SHARED_LIBS=OFF
-        cmake --build build --config Release
-        sudo mkdir -p /usr/local/lib/quickjs
-        sudo cp build/libqjs.a /usr/local/lib/quickjs/libquickjs.a
+      - name: Install QuickJS-NG (Linux or MacOS)
+        if: matrix.os.name != 'windows-latest'
+        #todo move to separate repo
+        run: |
+          git clone --depth 1 https://github.com/quickjs-ng/quickjs.git /tmp/quickjs
+          cd /tmp/quickjs
+          cmake -B build -DBUILD_SHARED_LIBS=OFF
+          cmake --build build --config Release
+          sudo mkdir -p /usr/local/lib/quickjs
+          sudo cp build/libqjs.a /usr/local/lib/quickjs/libquickjs.a
 
-      #todo move to separate repo
-    - name: Install QuickJS-NG (Windows)
-      if: matrix.os.name == 'windows-latest'
-      run: |
-        git clone --depth 1 https://github.com/quickjs-ng/quickjs.git c:\quickjs
-        cd c:\quickjs
-        cmake -B build -DQJS_BUILD_LIBC=ON -A x64 -DCMAKE_POLICY_DEFAULT_CMP0091=NEW -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
-        cmake --build build --config Release
-        mkdir C:\quickjs-lib
-        echo F | xcopy build\Release\qjs.lib C:\quickjs-lib\quickjs.lib
+        #todo move to separate repo
+      - name: Install QuickJS-NG (Windows)
+        if: matrix.os.name == 'windows-latest'
+        run: |
+          git clone --depth 1 https://github.com/quickjs-ng/quickjs.git c:\quickjs
+          cd c:\quickjs
+          cmake -B build -DQJS_BUILD_LIBC=ON -A x64 -DCMAKE_POLICY_DEFAULT_CMP0091=NEW -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
+          cmake --build build --config Release
+          mkdir C:\quickjs-lib
+          echo F | xcopy build\Release\qjs.lib C:\quickjs-lib\quickjs.lib
 
       - name: Build release
         run: dub build -b release --compiler=ldc2
