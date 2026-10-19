@@ -9,7 +9,7 @@
 	"libs": [
 		"quickjs"
 	],
-        "dflags": ["-Jsource"],
+	"dflags": ["-Jsource"],
 	"lflags-linux": [
 		"-L/usr/local/lib/quickjs"
 	],
@@ -17,7 +17,8 @@
 		"-L/usr/local/lib/quickjs"
 	],
 	"lflags-windows": [
-		"-LC:\\quickjs-lib"
+		"-LC:\\quickjs-lib",
+		"/STACK:8388608"
 	],
 	"description": "Youtube downloader",
 	"license": "MIT",
