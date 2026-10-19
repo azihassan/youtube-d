@@ -43,7 +43,7 @@ jobs:
       run: |
         git clone --depth 1 https://github.com/quickjs-ng/quickjs.git c:\quickjs
         cd c:\quickjs
-        cmake -B build -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release
+        cmake -B build -DQJS_BUILD_LIBC=ON -A x64 -DCMAKE_POLICY_DEFAULT_CMP0091=NEW -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
         cmake --build build
         mkdir C:\quickjs-lib
         echo F | xcopy build\Debug\qjs.lib C:\quickjs-lib\quickjs.lib
